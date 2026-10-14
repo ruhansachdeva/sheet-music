@@ -47,10 +47,11 @@ const TIME_SIGNATURES = [
 ];
 
 export class Editor {
-    constructor(container, { onChange, onClose }) {
+    constructor(container, { onChange, onClose, onPreview }) {
         this.container = container;
         this.onChange = onChange;
         this.onClose = onClose;
+        this.onPreview = onPreview;
         this.score = emptyScore();
         this.octave = 4;
         this.duration = "quarter";
@@ -93,6 +94,7 @@ export class Editor {
     }
 
     addNote(midi) {
+        this.onPreview?.(midi);
         this.remember();
         this.score.notes.push({
             midi,

@@ -309,6 +309,28 @@ export class Player {
         }
     }
 
+    /**
+     * Sounds one note immediately, for the note writer: pressing a key should
+     * make a sound the way a keyboard does.
+     */
+    async preview(midi, seconds = 0.6) {
+        const ctx = this.audioContext();
+        if (ctx.state === "suspended") await ctx.resume();
+        if (!this.melodic && !INSTRUMENTS[this.instrumentKey]?.drums) {
+            await this.setInstrument(this.instrumentKey);
+        }
+
+        const definition = INSTRUMENTS[this.instrumentKey] ?? {};
+        if (definition.drums) {
+            this.drumMachine?.start({ note: resolveDrumName(midi, this.drumNames) });
+            return;
+        }
+        this.melodic?.start({
+            note: concertPitch(midi, this.instrumentKey, this.transposeEnabled),
+            duration: seconds,
+        });
+    }
+
     /** A short sine blip, higher and louder on beat 1. */
     playClick(when, accent) {
         const ctx = this.ctx;
