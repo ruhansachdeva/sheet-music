@@ -9,6 +9,7 @@ import { QuestionPanel } from "./js/questions.js";
 
 const ui = {
     file: document.getElementById("file"),
+    chooseFile: document.getElementById("choose-file"),
     instrument: document.getElementById("instrument"),
     status: document.getElementById("status"),
     controls: document.getElementById("controls"),
@@ -83,6 +84,10 @@ ui.instrument.addEventListener("change", () => {
     localStorage.setItem("instrument", ui.instrument.value);
     player.setInstrument(ui.instrument.value).catch(reportError);
 });
+
+// The real file input is hidden: the buttons stand in for it, so they can be
+// styled and sized for a thumb.
+ui.chooseFile.addEventListener("click", () => ui.file.click());
 
 ui.file.addEventListener("change", () => {
     const file = ui.file.files?.[0];

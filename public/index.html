@@ -23,35 +23,36 @@
 
     <main>
         <section id="setup">
-            <div class="field">
-                <label class="label" for="file">Sheet music</label>
-                <input
-                    type="file"
-                    id="file"
-                    accept=".musicxml,.xml,.mxl,.mid,.midi,image/*,application/pdf"
-                />
-                <p class="hint">
-                    MusicXML and MIDI load straight away. Photos and PDFs go to Claude to be
-                    read. You can also drop a file anywhere on the page.
-                </p>
+            <div class="sources">
+                <button type="button" id="choose-file" class="source primary">
+                    Choose a file
+                </button>
             </div>
+            <input
+                type="file"
+                id="file"
+                class="visually-hidden"
+                accept=".musicxml,.xml,.mxl,.mid,.midi,image/*,application/pdf"
+            />
+            <p class="hint">
+                MusicXML and MIDI play straight away. Photos and PDFs are read for you.
+                You can also drop a file on the page.
+            </p>
 
             <div class="field">
                 <label class="label" for="instrument">Instrument</label>
                 <select id="instrument"></select>
-                <p class="hint">Sets the playback sound, and tells Claude what it is reading.</p>
             </div>
 
-            <div class="field">
-                <span class="label">Or try a sample</span>
+            <details class="try">
+                <summary>Try a sample</summary>
                 <div class="samples">
-                    <button data-sample="twinkle.musicxml">Twinkle (piano)</button>
+                    <button data-sample="twinkle.musicxml">Twinkle</button>
                     <button data-sample="timing-test.musicxml">Timing test</button>
                     <button data-sample="drum-groove.musicxml">Drum groove</button>
                     <button data-sample="groove.mid">MIDI groove</button>
                 </div>
-                <p class="hint">Small files in <code>samples/</code>.</p>
-            </div>
+            </details>
         </section>
 
         <p id="status" class="status" role="status" aria-live="polite" hidden></p>

@@ -562,3 +562,63 @@ body.dropping #setup {
         fill: #818cf8;
     }
 }
+
+/* --- file sources -------------------------------------------------------- */
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.sources {
+    display: grid;
+    gap: var(--s2);
+}
+
+.source {
+    min-height: 52px;
+    font-size: var(--text-base);
+}
+
+/* The sample list is secondary, so it stays folded away until asked for. */
+.try summary {
+    font-size: var(--text-sm);
+    color: var(--accent);
+    cursor: pointer;
+    min-height: var(--tap);
+    display: flex;
+    align-items: center;
+    list-style: none;
+}
+
+.try summary::-webkit-details-marker {
+    display: none;
+}
+
+.try summary::before {
+    content: "▸";
+    margin-right: var(--s2);
+    transition: transform 0.15s ease;
+}
+
+.try[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.try .samples {
+    padding-top: var(--s2);
+}
+
+@media (min-width: 700px) {
+    .sources {
+        grid-auto-flow: column;
+        grid-auto-columns: 1fr;
+    }
+}
