@@ -27,6 +27,7 @@ const ui = {
     moreControls: document.getElementById("more-controls"),
     zoom: document.getElementById("zoom"),
     zoomValue: document.getElementById("zoom-value"),
+    zoomFit: document.getElementById("zoom-fit"),
     piece: document.getElementById("piece"),
     pieceName: document.getElementById("piece-name"),
     download: document.getElementById("download"),
@@ -162,8 +163,19 @@ ui.tempoReset.addEventListener("click", () => {
 ui.zoom.addEventListener("change", () => {
     const percent = Number(ui.zoom.value);
     ui.zoomValue.textContent = `${percent}%`;
-    if (view === score) score.setZoom(percent / 100);
-    else ui.roll.style.setProperty("--roll-scale", String(percent / 100));
+    if (view === score) {
+        score.setZoom(percent / 100);
+        ui.zoomFit.hidden = false;
+    } else {
+        ui.roll.style.setProperty("--roll-scale", String(percent / 100));
+    }
+});
+
+// Back to the size that fits the screen.
+ui.zoomFit.addEventListener("click", () => {
+    if (view !== score) return;
+    showZoom(score.fitAgain());
+    ui.zoomFit.hidden = true;
 });
 
 ui.countIn.addEventListener("change", () => player.setOption("countIn", ui.countIn.checked));
@@ -341,12 +353,22 @@ function ready(label, loadedTimeline, note = "") {
     ui.pieceName.textContent = label;
     offerDownload(label);
 
+    // The score is engraved to fit, so show the size that was actually used.
+    if (view === score) showZoom(score.osmd.zoom);
+    ui.zoomFit.hidden = true;
+
     const tempoNote = loadedTimeline.scoreBpm
         ? `score tempo ${loadedTimeline.scoreBpm} BPM`
         : "no tempo marking, defaulting to 100 BPM";
     const parts = [`${loadedTimeline.notes.length} notes`, tempoNote];
     if (note) parts.push(note);
     setStatus(parts.join(" · "), "info");
+}
+
+function showZoom(factor) {
+    const percent = Math.round((factor ?? 1) * 100);
+    ui.zoom.value = percent;
+    ui.zoomValue.textContent = `${percent}%`;
 }
 
 /** Puts the slider back on the score's own tempo (or 100 BPM if it has none). */
