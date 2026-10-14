@@ -8,11 +8,11 @@ export const DIVISIONS = 480; // ticks per quarter note
 
 /** Note lengths, longest first - the order the splitter relies on. */
 export const DURATIONS = [
-    { name: "whole", label: "𝅝", ticks: DIVISIONS * 4 },
-    { name: "half", label: "𝅗𝅥", ticks: DIVISIONS * 2 },
-    { name: "quarter", label: "♩", ticks: DIVISIONS },
-    { name: "eighth", label: "♪", ticks: DIVISIONS / 2 },
-    { name: "16th", label: "𝅘𝅥𝅯", ticks: DIVISIONS / 4 },
+    { name: "whole", label: "whole note", ticks: DIVISIONS * 4 },
+    { name: "half", label: "half note", ticks: DIVISIONS * 2 },
+    { name: "quarter", label: "quarter note", ticks: DIVISIONS },
+    { name: "eighth", label: "eighth note", ticks: DIVISIONS / 2 },
+    { name: "16th", label: "sixteenth note", ticks: DIVISIONS / 4 },
 ];
 
 const BY_NAME = Object.fromEntries(DURATIONS.map((d) => [d.name, d]));
