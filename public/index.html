@@ -4,6 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Sheet Music Player</title>
+    <link
+        rel="icon"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%232563eb' d='M6 2h7v2L8 5v7a3 3 0 1 1-2-2.83V2z'/%3E%3C/svg%3E"
+    />
     <link rel="stylesheet" href="style.css" />
     <!-- OpenSheetMusicDisplay ships a UMD bundle, so it loads as a plain script
          and the modules below use the global it defines. -->
@@ -73,7 +77,10 @@
         </section>
 
         <p id="piece" class="piece" hidden></p>
-        <section id="score" class="score"></section>
+        <!-- Hidden with the attribute, not with CSS: OSMD measures this
+             container to lay the score out, and a display:none container
+             would make it render zero pixels wide. -->
+        <section id="score" class="score" hidden></section>
         <section id="roll" class="roll" hidden></section>
     </main>
 

@@ -338,6 +338,15 @@ async function run() {
             await page.evaluate("return document.querySelectorAll('#score svg').length > 0"),
             true,
         );
+        // A hidden container would make OSMD lay the score out zero pixels
+        // wide, which still produces an SVG - so check the geometry too.
+        const engraving = await page.evaluate(`
+            const svg = document.querySelector("#score svg");
+            const box = svg.getBoundingClientRect();
+            return { width: box.width, height: box.height };
+        `);
+        check("laid out at a sensible width", engraving.width > 400, true);
+        check("and a sensible height", engraving.height > 100, true);
         check(
             "notes light up under the cursor",
             await page.evaluate(`

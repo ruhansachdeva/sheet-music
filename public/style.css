@@ -309,10 +309,6 @@ button.link {
     overflow-x: auto;
 }
 
-.score:empty {
-    display: none;
-}
-
 /* The note under the cursor. A CSS rule beats VexFlow's fill attributes, so
    this recolours notes without a re-render. */
 .note-lit path,
