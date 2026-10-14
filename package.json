@@ -5,8 +5,13 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --watch --env-file-if-exists=.env server.js",
+    "check": "node tools/check-musicxml.mjs samples/*.musicxml",
+    "test": "node tools/browser-test.mjs",
+    "test:audio": "node tools/browser-test.mjs --audio",
+    "test:claude": "node --env-file-if-exists=.env tools/claude-test.mjs",
+    "make-midi": "node tools/make-midi-sample.mjs"
   },
   "license": "ISC",
   "dependencies": {
