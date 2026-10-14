@@ -1,0 +1,64 @@
+# Publishes the browser half of the app to GitHub Pages.
+#
+# Pages serves static files, so the hosted copy plays, writes and renders music
+# but cannot read a photo: that needs the Express server and an API key, and a
+# key must never be shipped to a browser. The app detects this and says so.
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci || npm install
+
+      - name: Check the samples still add up
+        run: npm run check
+
+      - name: Check the note writer
+        run: npm run test:editor
+
+      - name: Assemble the site
+        run: |
+          mkdir -p site
+          cp -r public/* site/
+          cp -r samples site/samples
+          # Pages would otherwise run the files through Jekyll, which skips
+          # directories that begin with an underscore.
+          touch site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
