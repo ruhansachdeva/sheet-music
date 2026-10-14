@@ -1,21 +1,167 @@
 # Sheet Music Player
 
-Upload any sheet music, pick an instrument, and play it back with correct timing.
+Upload any sheet music, pick an instrument, and play it back with correct timing,
+a metronome, and the current note lit up on the score.
 
-## Planned features
+- **MusicXML** (`.musicxml`, `.xml`, `.mxl`) and **MIDI** (`.mid`, `.midi`) load
+  straight in the browser.
+- **Photos and PDFs** go to Claude, which reads them into MusicXML and asks a
+  question when something on the page is genuinely ambiguous.
+- **Instruments**: piano, violin, cello, flute, clarinet, trumpet, alto sax,
+  tenor sax, guitar, drums.
+- **Timing**: tempo, time signatures, dotted notes, ties, triplets and other
+  tuplets, rests, repeats, and several voices or staves at once.
+- **Metronome**: separate count-in and during-playback toggles, accented on
+  beat 1, clicking on the time signature's beat.
 
-- **Upload**: MusicXML (`.musicxml`, `.xml`, `.mxl`) and MIDI load directly. Photos and PDFs are read by Claude, which asks clarifying questions when something is unclear (for example, "is this a tie?").
-- **Instrument picker**: changes the playback sound.
-- **Accurate timing**: ties, dots, tuplets and tempo handled correctly.
-- **Metronome**: separate toggles for a count-in and for clicking during playback.
-- **Highlighting**: the note on the current beat lights up as it plays.
-
-## Setup
+## Run it
 
 ```
 npm install
-cp .env.example .env   # add your ANTHROPIC_API_KEY
+cp .env.example .env     # add your ANTHROPIC_API_KEY
 npm start
 ```
 
-Then open http://localhost:3000
+Then open http://localhost:3000.
+
+The key is only needed for photos and PDFs. Without it the app still loads
+MusicXML and MIDI, and says so on startup. The key stays on the server: the
+browser only ever talks to `/api/transcribe` and `/api/refine`.
+
+## Testing each feature
+
+The four files in `samples/` cover everything without needing a key.
+
+**Score rendering and playback** — click *Twinkle (piano)*, then Play. Two staves
+play together, the notes under the cursor turn orange, and the page follows the
+cursor.
+
+**Timing** — click *Timing test*. It is built to be checked by ear against the
+score:
+
+| Bar | What to listen for |
+| --- | --- |
+| 1 | A dotted quarter, then a short eighth, then a quarter, then a bar of silence for the rest |
+| 2 | Three even triplet eighths inside one beat, then a quarter, then a half |
+| 3-4 | The F at the end of bar 3 is tied over the barline: one held note lasting a whole note, not two |
+| 1-4 again | The repeat jumps back and plays bars 1-4 a second time |
+| 5-6 | 6/8: six eighths, then two dotted quarters |
+
+**Metronome and count-in** — with *Timing test* loaded, tick **Count in** and
+press Play: four clicks, accented on the first, before the music. Tick
+**Metronome** and listen through to bar 5, where the click changes to six
+eighth-note clicks per bar because the time signature does.
+
+**Tempo** — the slider starts at the score's own tempo (96 BPM for the timing
+test, 100 if a score has no marking). Drag it while the music plays; it speeds up
+without losing its place, and the metronome follows. *Reset to score tempo* puts
+it back.
+
+**Instruments and transposition** — load *Twinkle* and switch between piano,
+violin and flute: same notes, different sound. Switch to clarinet and the
+playback drops a tone (written pitch to concert pitch), as it should: -2
+semitones for clarinet and trumpet, -9 for alto sax, -14 for tenor sax, -12 for
+guitar.
+
+**Drums** — click *Drum groove*. The notes on the percussion staff are read
+through the score's own `<midi-unpitched>` mapping, so the kick, snare, hi-hat
+and crash each play their own sound. Picking **Drums** in the instrument list
+plays any score through the kit.
+
+**MIDI** — click *MIDI groove*. MIDI has no notation, so it shows as a piano roll
+with the sounding notes lit and a playhead. The file has a melody on channel 1
+and a kit on channel 10; the channel-10 track plays as drums whichever
+instrument is picked. MIDI is already at concert pitch, so it is never
+transposed.
+
+**Photos and PDFs** (needs a key) — upload a photo of a page, or a PDF. Pick the
+instrument first: it is passed to Claude as context. Claude returns MusicXML plus
+any questions, the score renders, and it plays immediately.
+
+**Clarifying questions** (needs a key) — when Claude is unsure, a panel appears
+above the score. Each question has buttons for its suggested answers, a free-text
+box, and *Skip*. Answer what you know, press *Send answers to Claude*, and the
+corrected score replaces the old one. Skipped questions keep Claude's best guess.
+*Skip all* dismisses the panel and keeps the score you already have.
+
+Keyboard: space plays and pauses.
+
+## Automated checks
+
+```
+npm run check        # every measure in samples/ adds up to its time signature
+npm test             # loads each sample in headless Chrome, checks the timeline
+npm run test:audio   # also plays, and watches the audio clock and cursor
+npm run test:claude  # end to end through Claude - costs money, needs a key
+```
+
+`npm test` is the useful one. It drives a real browser over the DevTools
+protocol and asserts on the timeline the timing engine produces: that a dotted
+quarter is 1.5 beats, that six triplet eighths are a third of a beat each, that
+the tied F is one note of a whole note's length, that the repeat unrolls into a
+second pass, that 6/8 produces six clicks a bar, that drum notes map to the right
+kit pieces, and that the engraving is laid out at a sensible size. It needs a
+Chromium binary — it finds Playwright's cached one, or set `CHROME_PATH`.
+
+`npm run test:claude` has no photograph to work from, so it renders a sample in
+the browser, screenshots the engraving, and posts that image to
+`/api/transcribe` as if you had photographed it. It then checks the MusicXML that
+comes back renders, plays, and has measures that add up. Add `-- --answer` to
+answer every question with its first option and exercise `/api/refine` too.
+
+## How it works
+
+```
+server.js            Express: POST /api/transcribe, POST /api/refine
+lib/claude.js        the Claude call, the prompt, and the response schema
+public/app.js        picks a loader for the file, wires up the controls
+public/js/score.js   renders MusicXML, reads a timeline out of it
+public/js/midi.js    parses MIDI, draws the piano roll
+public/js/player.js  the audio clock, scheduler and metronome
+public/js/drums.js   General MIDI percussion keys to drum machine sounds
+public/js/questions.js  the clarifying-question panel
+tools/               the checks above, and the MIDI sample generator
+```
+
+**Reading the score.** `score.js` walks the score with OpenSheetMusicDisplay's
+own iterator, which unrolls repeats and follows tempo changes, and records three
+things in one pass: note events, the cursor positions for highlighting, and a
+metronome beat grid. Times are in *reference seconds* - seconds at the score's
+own tempo - so the tempo slider is one multiplier applied at playback, and
+scores that change tempo part-way through still scale correctly. A tied note is
+emitted once at its start note for the whole tied length, so it sounds as one
+held note.
+
+**Playing it.** Everything audible is scheduled on the Web Audio clock. A timer
+wakes up every 25 ms, looks 150 ms ahead, and hands each event in that window to
+the audio graph with an exact start time, so the timing does not drift when the
+main thread is busy. Nothing is played by `setTimeout`. The highlighting runs off
+`requestAnimationFrame` and reads the same audio clock, so what you see and what
+you hear stay together.
+
+**Reading a photo.** `lib/claude.js` sends the image or PDF to
+`claude-opus-5-5` with adaptive thinking, `effort: "high"`, and a strict JSON
+schema for the response, streamed because a full score of MusicXML is long.
+Server-side refusal fallbacks are on. The prompt asks for complete MusicXML 3.1
+at written pitch, and is strict about the thing that breaks playback most often:
+every measure's durations have to add up to the time signature. Questions are
+asked only when a reading is genuinely ambiguous and the answer changes the notes
+or the timing.
+
+Libraries come from jsDelivr, so there is no build step:
+[opensheetmusicdisplay](https://opensheetmusicdisplay.org/) 2.2.1 for the score
+and its cursor, [smplr](https://github.com/danigb/smplr) 1.1.0 for soundfont
+instruments and the drum machine, and
+[@tonejs/midi](https://github.com/Tonejs/Midi) 2.0.28 for MIDI files.
+
+## Known limits
+
+- One file at a time, so a multi-page PDF works but several photos of one piece
+  do not; upload them one page at a time.
+- Instrument samples download on first use, so the first Play after switching
+  instrument can wait a moment.
+- A tempo change in the middle of a measure moves the notes correctly but leaves
+  that measure's remaining metronome clicks at the old tempo.
+- Drum notation without a `<midi-unpitched>` mapping falls back to reading the
+  staff position, using the common drum-notation convention; an unusual drum map
+  can land on the wrong kit piece.
