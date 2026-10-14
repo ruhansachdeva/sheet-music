@@ -432,6 +432,30 @@ async function run() {
         check("C5 is the snare", kit.staffSnare, 38);
         check("G5 above the staff is the hi-hat", kit.staffHat, 42);
 
+        // --- served by the app, so reading a photo is on offer ---------------
+        console.log("\nserved with a reader behind it");
+        const health = await page.evaluate(`
+            const response = await fetch("api/health");
+            const body = await response.json();
+            return {
+                ok: response.ok,
+                canRead: body.canRead,
+                noticeHidden: document.getElementById("no-reader").hidden,
+                noticeText: document.getElementById("no-reader").textContent,
+                acceptsImages: document.getElementById("file").accept.includes("image/*"),
+            };
+        `);
+        check("the health endpoint answers", health.ok, true);
+        // The suite runs the server without a key, so what matters is that the
+        // interface agrees with what the server reports either way.
+        check("the notice matches whether it can read", health.noticeHidden, health.canRead);
+        check("the picker matches too", health.acceptsImages, health.canRead);
+        check(
+            "and it explains which case it is",
+            health.canRead || /API key is set/.test(health.noticeText),
+            true,
+        );
+
         // --- writing a score by hand ----------------------------------------
         console.log("\nwriting a score");
         const written = await page.evaluate(`

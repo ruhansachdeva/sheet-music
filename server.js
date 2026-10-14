@@ -37,6 +37,17 @@ function readInstrument(body) {
 
 
 
+/** Lets the browser find out whether there is a reader behind this page. */
+app.get("/api/health", (_req, res) => {
+    let provider = null;
+    try {
+        provider = currentProvider();
+    } catch {
+        provider = null;
+    }
+    res.json({ ok: true, canRead: Boolean(provider), provider: provider?.label ?? null });
+});
+
 /** A photo or PDF in, MusicXML plus any clarifying questions out. */
 app.post("/api/transcribe", upload.single("file"), async (req, res, next) => {
     try {

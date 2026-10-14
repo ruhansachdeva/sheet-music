@@ -38,6 +38,7 @@ const ui = {
     questions: document.getElementById("questions"),
     samples: document.querySelectorAll("[data-sample]"),
     setupWrap: document.getElementById("setup-wrap"),
+    noReader: document.getElementById("no-reader"),
     writeMusic: document.getElementById("write-music"),
     editor: document.getElementById("editor"),
     setupTitle: document.getElementById("setup-title"),
@@ -108,6 +109,40 @@ for (const [key, definition] of Object.entries(INSTRUMENTS)) {
     option.textContent = definition.label;
     ui.instrument.appendChild(option);
 }
+/**
+ * Whether a transcription server is behind this page. The hosted build is
+ * static files only, so there is nothing to read a photo with there.
+ */
+let canRead = true;
+
+async function checkReader() {
+    // Three states, and they need different explanations: no server at all
+    // (the hosted static build), a server with no key, or a working reader.
+    let served = true;
+    try {
+        const response = await fetch("api/health");
+        if (!response.ok) throw new Error("no reader");
+        canRead = Boolean((await response.json()).canRead);
+    } catch {
+        served = false;
+        canRead = false;
+    }
+
+    if (canRead) return;
+
+    ui.noReader.textContent = served
+        ? "No API key is set, so photos and PDFs cannot be read. Add one to .env and " +
+          "restart - see the README. Playing and writing music works either way."
+        : "This hosted copy is static files only. Playing and writing music works here; " +
+          "reading a photo or a PDF needs the app running locally with an API key.";
+    ui.noReader.hidden = false;
+    ui.takePhoto.hidden = true;
+    // Leave the file picker, but stop it offering what it cannot do.
+    ui.file.accept = ".musicxml,.xml,.mxl,.mid,.midi";
+}
+
+checkReader();
+
 // Until something is loaded, the setup is the page - no point folding it.
 ui.setupWrap.classList.add("first-run");
 
@@ -261,6 +296,10 @@ async function loadFile(file) {
         } else if (name.endsWith(".mid") || name.endsWith(".midi")) {
             await showPianoRoll(await file.arrayBuffer(), file.name);
         } else if (file.type.startsWith("image/") || file.type === "application/pdf") {
+            if (!canRead) {
+                setStatus(ui.noReader.textContent.trim(), "error");
+                return;
+            }
             await transcribe(file);
         } else {
             setStatus(`I don't know how to read ${file.name}.`, "error");
@@ -278,7 +317,7 @@ async function loadSample(name) {
     questionPanel.hide();
 
     try {
-        const response = await fetch(`/samples/${name}`);
+        const response = await fetch(`samples/${name}`);
         if (!response.ok) throw new Error(`${response.status}`);
 
         if (name.endsWith(".mid") || name.endsWith(".midi")) {
@@ -333,7 +372,7 @@ async function transcribe(file) {
     setUploadsEnabled(false);
     let result;
     try {
-        result = await post("/api/transcribe", body);
+        result = await post("api/transcribe", body);
     } finally {
         setUploadsEnabled(true);
     }
@@ -358,7 +397,7 @@ async function sendAnswers(answers) {
         body.append("musicxml", currentMusicXml);
         body.append("answers", JSON.stringify(answers));
 
-        const result = await post("/api/refine", body);
+        const result = await post("api/refine", body);
         await showScore(result.musicxml, result.title);
         ui.pieceName.textContent = `${result.title} — corrected`;
         offerDownload(result.title);
