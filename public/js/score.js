@@ -57,13 +57,94 @@ export class Score {
         this.osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay(container, {
             autoResize: true,
             backend: "svg",
-            drawTitle: true,
+            // The page shows the title above the score already, and a long one
+            // centred inside the engraving overflows a narrow screen on both
+            // sides, which is what clipped it on a phone.
+            drawTitle: false,
+            drawSubtitle: false,
+            drawComposer: false,
             drawingParameters: "default",
             followCursor: true,
             cursorsOptions: [{ type: 0, color: "#2563eb", alpha: 0.25, follow: true }],
         });
         this.litElements = [];
         this.stepIndex = -1;
+        this.userZoom = null; // set once the size slider is touched
+
+        // Re-fit when the window changes shape, e.g. a phone being turned.
+        window.addEventListener("resize", () => this.scheduleRefit());
+    }
+
+    /** Re-fitting re-engraves, so coalesce bursts of resize events. */
+    scheduleRefit() {
+        if (!this.osmd.Sheet) return;
+        clearTimeout(this.refitTimer);
+        this.refitTimer = setTimeout(() => {
+            const changed = this.applyResponsiveOptions();
+            if (changed) this.osmd.render();
+            if (this.userZoom === null) this.fitToWidth();
+            else if (changed) this.restoreCursor();
+        }, 250);
+    }
+
+    /**
+     * Part names are printed to the left of every system, which is a luxury a
+     * phone cannot afford. Returns whether the setting changed.
+     */
+    applyResponsiveOptions() {
+        const wide = window.innerWidth >= 700;
+        if (wide === this.showingPartNames) return false;
+
+        this.showingPartNames = wide;
+        this.osmd.setOptions({ drawPartNames: wide, drawPartAbbreviations: wide });
+        return true;
+    }
+
+    /**
+     * Engraves at whatever zoom makes the music fit the container's width.
+     * OSMD lays a system out to the container, but it will not compress past a
+     * minimum, so on a phone the staff overflows and gets clipped. Measuring
+     * what it actually drew and scaling to that is what makes a score readable
+     * on a narrow screen.
+     */
+    fitToWidth() {
+        // The SVG element is already clamped to its container, so measuring it
+        // says nothing. What matters is the box the engraving actually draws
+        // into, which on a narrow screen runs outside the element on both
+        // sides - that is what clips the title and the last bar.
+        for (let pass = 0; pass < 4; pass++) {
+            const svg = this.container.querySelector("svg");
+            if (!svg) return;
+
+            const available = svg.getBoundingClientRect().width;
+            const box = svg.getBBox();
+            const needed = Math.max(box.width, box.x + box.width);
+            if (available <= 0 || needed <= 0) return;
+
+            const fits = needed <= available + 1 && box.x >= -1;
+            if (fits) break;
+
+            // A little under the exact ratio, so rounding cannot leave it
+            // one pixel too wide and send us round again.
+            const next = Math.min(1, Math.max(0.3, (this.osmd.zoom * available * 0.98) / needed));
+            if (Math.abs(next - this.osmd.zoom) < 0.01) break;
+
+            this.osmd.zoom = next;
+            this.osmd.render();
+        }
+
+        this.restoreCursor();
+        return this.osmd.zoom;
+    }
+
+    /** A re-render replaces the SVG, so the cursor and colours start over. */
+    restoreCursor() {
+        const step = this.stepIndex;
+        this.litElements = [];
+        this.stepIndex = -1;
+        this.osmd.cursor.reset();
+        this.osmd.cursor.hide();
+        if (step >= 0) this.showStep(step);
     }
 
     /** `content` is a MusicXML string, or a Blob for a compressed .mxl file. */
@@ -75,8 +156,11 @@ export class Score {
             throw new Error("That does not look like MusicXML - no <score-partwise> in it.");
         }
 
+        this.applyResponsiveOptions();
         await this.osmd.load(content);
+        this.osmd.zoom = 1;
         this.osmd.render();
+        if (this.userZoom === null) this.fitToWidth();
         this.osmd.cursor.reset();
         this.osmd.cursor.hide();
         this.stepIndex = -1;
@@ -186,20 +270,25 @@ export class Score {
         };
     }
 
-    /** Re-engraves at a new size, keeping the cursor where it was. */
+    /**
+     * Re-engraves at a size you chose, which turns off automatic fitting:
+     * once you have picked a size, a resize should not overrule it.
+     */
     setZoom(factor) {
         if (!this.osmd.Sheet) return;
-        const step = this.stepIndex;
-
+        this.userZoom = factor;
         this.osmd.zoom = factor;
         this.osmd.render();
+        this.restoreCursor();
+    }
 
-        // A re-render replaces the SVG, so the cursor and colours start over.
-        this.litElements = [];
-        this.stepIndex = -1;
-        this.osmd.cursor.reset();
-        this.osmd.cursor.hide();
-        if (step >= 0) this.showStep(step);
+    /** Hands the size control back to automatic fitting. */
+    fitAgain() {
+        this.userZoom = null;
+        this.osmd.zoom = 1;
+        this.osmd.render();
+        this.fitToWidth();
+        return this.osmd.zoom;
     }
 
     /** Moves the cursor to a step and lights up the notes under it. */
