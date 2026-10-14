@@ -24,6 +24,10 @@
     <main>
         <section id="setup">
             <div class="sources">
+                <!-- Shown only on a device with a camera; see app.js. -->
+                <button type="button" id="take-photo" class="source primary" hidden>
+                    <span aria-hidden="true">📷</span> Take a photo
+                </button>
                 <button type="button" id="choose-file" class="source primary">
                     Choose a file
                 </button>
@@ -33,6 +37,15 @@
                 id="file"
                 class="visually-hidden"
                 accept=".musicxml,.xml,.mxl,.mid,.midi,image/*,application/pdf"
+            />
+            <!-- capture asks the phone for its rear camera rather than the photo
+                 library, so pointing it at a page is one tap. -->
+            <input
+                type="file"
+                id="camera"
+                class="visually-hidden"
+                accept="image/*"
+                capture="environment"
             />
             <p class="hint">
                 MusicXML and MIDI play straight away. Photos and PDFs are read for you.

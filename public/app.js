@@ -10,6 +10,8 @@ import { QuestionPanel } from "./js/questions.js";
 const ui = {
     file: document.getElementById("file"),
     chooseFile: document.getElementById("choose-file"),
+    takePhoto: document.getElementById("take-photo"),
+    camera: document.getElementById("camera"),
     instrument: document.getElementById("instrument"),
     status: document.getElementById("status"),
     controls: document.getElementById("controls"),
@@ -85,9 +87,24 @@ ui.instrument.addEventListener("change", () => {
     player.setInstrument(ui.instrument.value).catch(reportError);
 });
 
-// The real file input is hidden: the buttons stand in for it, so they can be
-// styled and sized for a thumb.
+// The real file inputs are hidden: the buttons stand in for them, so they can
+// be styled and sized for a thumb.
 ui.chooseFile.addEventListener("click", () => ui.file.click());
+ui.takePhoto.addEventListener("click", () => ui.camera.click());
+
+ui.camera.addEventListener("change", () => {
+    const photo = ui.camera.files?.[0];
+    if (!photo) return;
+    loadFile(photo);
+    ui.camera.value = "";
+});
+
+// Only offer the camera where there is one: a desktop browser ignores the
+// capture attribute, so the button would just reopen the file dialog.
+if (window.matchMedia?.("(pointer: coarse)").matches && navigator.mediaDevices?.getUserMedia) {
+    ui.takePhoto.hidden = false;
+    ui.chooseFile.classList.remove("primary");
+}
 
 ui.file.addEventListener("change", () => {
     const file = ui.file.files?.[0];
