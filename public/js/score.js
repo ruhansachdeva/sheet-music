@@ -68,6 +68,13 @@ export class Score {
 
     /** `content` is a MusicXML string, or a Blob for a compressed .mxl file. */
     async load(content) {
+        // OSMD treats a string that does not look like XML as a URL to fetch,
+        // so a file of the wrong kind would turn into a stray request and a
+        // confusing error. Check it here instead.
+        if (typeof content === "string" && !/<\s*score-(partwise|timewise)/i.test(content)) {
+            throw new Error("That does not look like MusicXML - no <score-partwise> in it.");
+        }
+
         await this.osmd.load(content);
         this.osmd.render();
         this.osmd.cursor.reset();
