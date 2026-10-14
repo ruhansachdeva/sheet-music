@@ -67,6 +67,8 @@ class DevTools {
         this.nextId = 1;
         this.pending = new Map();
         this.logs = [];
+        /** Errors a check deliberately provokes, so they are not failures. */
+        this.expected = [];
 
         socket.addEventListener("message", (event) => {
             const message = JSON.parse(event.data);
@@ -129,12 +131,16 @@ class DevTools {
         return result.result.value;
     }
 
+    expect(pattern) {
+        this.expected.push(pattern);
+    }
+
     problems() {
         return this.logs.filter(
             (log) =>
                 ["error", "exception"].includes(log.level) &&
-                // The soundfont CDN has no favicon; harmless.
-                !log.text.includes("favicon"),
+                !log.text.includes("favicon") &&
+                !this.expected.some((pattern) => pattern.test(log.text)),
         );
     }
 }
@@ -355,6 +361,75 @@ async function run() {
             `),
             true,
         );
+
+        // --- transposition and drum naming (pure functions) -----------------
+        console.log("\ntransposing instruments");
+        const transposed = await page.evaluate(`
+            const { concertPitch } = await import("./js/instruments.js");
+            const written = 72; // C5 as printed
+            return {
+                piano: concertPitch(written, "piano"),
+                clarinet: concertPitch(written, "clarinet"),
+                trumpet: concertPitch(written, "trumpet"),
+                alto: concertPitch(written, "alto sax"),
+                tenor: concertPitch(written, "tenor sax"),
+                guitar: concertPitch(written, "guitar"),
+                midiFile: concertPitch(written, "clarinet", false),
+            };
+        `);
+        check("piano plays as written", transposed.piano, 72);
+        check("clarinet sounds a tone lower", transposed.clarinet, 70);
+        check("trumpet sounds a tone lower", transposed.trumpet, 70);
+        check("alto sax sounds a major sixth lower", transposed.alto, 63);
+        check("tenor sax sounds a ninth lower", transposed.tenor, 58);
+        check("guitar sounds an octave lower", transposed.guitar, 60);
+        check("a MIDI file is never transposed", transposed.midiFile, 72);
+
+        console.log("\ndrum mapping");
+        const kit = await page.evaluate(`
+            const { resolveDrumName, gmKeyFromStaffPosition } = await import("./js/drums.js");
+            const names = window.sheetMusic.player.drumNames.length
+                ? window.sheetMusic.player.drumNames
+                : ["kick", "snare", "hihat-close", "hihat-open", "cymbal", "tom-low", "clap"];
+            return {
+                kick: resolveDrumName(36, names),
+                snare: resolveDrumName(38, names),
+                closedHat: resolveDrumName(42, names),
+                openHat: resolveDrumName(46, names),
+                crash: resolveDrumName(49, names),
+                unknown: resolveDrumName(99, names),
+                staffKick: gmKeyFromStaffPosition(65), // F4
+                staffSnare: gmKeyFromStaffPosition(72), // C5
+                staffHat: gmKeyFromStaffPosition(79), // G5
+            };
+        `);
+        check("kick", kit.kick, "kick");
+        check("snare", kit.snare, "snare");
+        check("closed hi-hat", kit.closedHat, "hihat-close");
+        check("open hi-hat", kit.openHat, "hihat-open");
+        check("crash falls back to a cymbal", kit.crash, "cymbal");
+        check("an unmapped key still makes a sound", kit.unknown, "snare");
+        check("F4 on a drum staff is the kick", kit.staffKick, 36);
+        check("C5 is the snare", kit.staffSnare, 38);
+        check("G5 above the staff is the hi-hat", kit.staffHat, 42);
+
+        // --- a file that is not sheet music ---------------------------------
+        console.log("\nbad input");
+        // The app is supposed to log this one, so it is not a problem.
+        page.expect(/does not look like MusicXML/);
+        const rejected = await page.evaluate(`
+            const file = new File(["not music at all"], "junk.musicxml", { type: "text/xml" });
+            const input = document.getElementById("file");
+            const transfer = new DataTransfer();
+            transfer.items.add(file);
+            input.files = transfer.files;
+            input.dispatchEvent(new Event("change"));
+            await new Promise((r) => setTimeout(r, 1500));
+            const status = document.getElementById("status");
+            return { text: status.textContent, kind: status.className };
+        `);
+        check("an unreadable file reports an error", rejected.kind.includes("error"), true);
+        check("and says so in the status", rejected.text.length > 0, true, rejected.text);
 
         // --- optional: real playback ----------------------------------------
         if (WITH_AUDIO) {
