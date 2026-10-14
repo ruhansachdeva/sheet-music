@@ -244,6 +244,9 @@ function ready(label, loadedTimeline, note = "") {
 /** Puts the slider back on the score's own tempo (or 100 BPM if it has none). */
 function setTempo(loadedTimeline) {
     const bpm = loadedTimeline.bpm;
+    // A score can be marked faster or slower than the slider's usual range.
+    ui.tempo.min = Math.min(30, bpm);
+    ui.tempo.max = Math.max(240, bpm);
     ui.tempo.value = bpm;
     ui.tempoValue.textContent = `${bpm} BPM`;
     player.setTempo(bpm);
