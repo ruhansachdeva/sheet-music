@@ -32,6 +32,7 @@ const ui = {
     piece: document.getElementById("piece"),
     pieceName: document.getElementById("piece-name"),
     download: document.getElementById("download"),
+    editScore: document.getElementById("edit-score"),
     score: document.getElementById("score"),
     roll: document.getElementById("roll"),
     questions: document.getElementById("questions"),
@@ -66,7 +67,11 @@ const questionPanel = new QuestionPanel(ui.questions, { onSubmit: sendAnswers })
 // what you are writing as you write it.
 const editor = new Editor(ui.editor, {
     onChange: (written) => showWrittenScore(written),
-    onClose: () => setStatus("Saved. Press play to hear it.", "info"),
+    onPreview: (midi) => player.preview(midi).catch(() => {}),
+    onClose: () => {
+        setStatus("Saved. Press play to hear it.", "info");
+        ui.editScore.hidden = false;
+    },
 });
 
 async function showWrittenScore() {
@@ -119,7 +124,16 @@ ui.instrument.addEventListener("change", () => {
 // The real file inputs are hidden: the buttons stand in for them, so they can
 // be styled and sized for a thumb.
 ui.chooseFile.addEventListener("click", () => ui.file.click());
-ui.writeMusic.addEventListener("click", () => editor.open());
+ui.writeMusic.addEventListener("click", () => {
+    ui.editScore.hidden = true;
+    editor.open();
+});
+
+// Go back into something you wrote, rather than starting again.
+ui.editScore.addEventListener("click", () => {
+    ui.editScore.hidden = true;
+    editor.open(editor.score);
+});
 ui.takePhoto.addEventListener("click", () => ui.camera.click());
 
 ui.camera.addEventListener("change", () => {
