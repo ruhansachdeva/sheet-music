@@ -77,7 +77,19 @@
                 <button id="play" class="primary" aria-keyshortcuts="Space">Play</button>
                 <button id="stop">Stop</button>
                 <output id="position" class="position" aria-live="off">bar 1</output>
+                <button
+                    type="button"
+                    id="more"
+                    class="more"
+                    aria-expanded="false"
+                    aria-controls="more-controls"
+                >
+                    <span aria-hidden="true">⋯</span>
+                    <span class="visually-hidden">More controls</span>
+                </button>
             </div>
+
+            <div id="more-controls" class="more-controls">
 
             <div class="tempo">
                 <span class="label" id="tempo-label">Tempo</span>
@@ -95,6 +107,7 @@
                 <span class="label" id="zoom-label">Size</span>
                 <input type="range" id="zoom" min="50" max="200" step="10" value="100" aria-labelledby="zoom-label" />
                 <output id="zoom-value">100%</output>
+            </div>
             </div>
         </section>
 

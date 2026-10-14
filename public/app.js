@@ -23,6 +23,8 @@ const ui = {
     countIn: document.getElementById("count-in"),
     metronome: document.getElementById("metronome"),
     position: document.getElementById("position"),
+    more: document.getElementById("more"),
+    moreControls: document.getElementById("more-controls"),
     zoom: document.getElementById("zoom"),
     zoomValue: document.getElementById("zoom-value"),
     piece: document.getElementById("piece"),
@@ -135,6 +137,12 @@ document.addEventListener("drop", (event) => {
     event.preventDefault();
     document.body.classList.remove("dropping");
     loadFile(file);
+});
+
+// The docked bar keeps only play, stop and position; the rest slides up.
+ui.more.addEventListener("click", () => {
+    const open = ui.moreControls.classList.toggle("open");
+    ui.more.setAttribute("aria-expanded", String(open));
 });
 
 ui.play.addEventListener("click", () => Promise.resolve(player.toggle()).catch(reportError));
@@ -328,6 +336,7 @@ function ready(label, loadedTimeline, note = "") {
     setTempo(loadedTimeline);
 
     ui.controls.hidden = false;
+    document.body.classList.add("has-transport");
     ui.piece.hidden = false;
     ui.pieceName.textContent = label;
     offerDownload(label);
