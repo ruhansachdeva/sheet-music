@@ -562,7 +562,11 @@ async function run() {
 
         // --- optional: real playback ----------------------------------------
         if (WITH_AUDIO) {
+            // The checks above leave whatever they loaded last on screen - the
+            // writer's cleared score, or a file that failed to load. Playback
+            // needs a known score with notes in it.
             console.log("\nplayback (audio clock)");
+            await loadSample(page, "twinkle.musicxml");
             const played = await page.evaluate(`
                 const { player, score } = window.sheetMusic;
                 player.setOption("metronome", true);
