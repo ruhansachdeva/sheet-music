@@ -16,12 +16,14 @@
 <body>
     <header>
         <h1>Sheet Music Player</h1>
-        <p class="tagline">
-            Upload MusicXML, MIDI, a photo or a PDF. Pick an instrument. Press play.
-        </p>
+        <p class="tagline">Photograph it, upload it, or write it. Then press play.</p>
     </header>
 
     <main>
+        <details id="setup-wrap" class="setup-wrap" open>
+        <summary class="setup-summary">
+            <span id="setup-title">Load sheet music</span>
+        </summary>
         <section id="setup">
             <div class="sources">
                 <!-- Shown only on a device with a camera; see app.js. -->
@@ -67,6 +69,7 @@
                 </div>
             </details>
         </section>
+        </details>
 
         <p id="status" class="status" role="status" aria-live="polite" hidden></p>
 

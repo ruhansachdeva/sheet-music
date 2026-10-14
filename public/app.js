@@ -35,6 +35,8 @@ const ui = {
     roll: document.getElementById("roll"),
     questions: document.getElementById("questions"),
     samples: document.querySelectorAll("[data-sample]"),
+    setupWrap: document.getElementById("setup-wrap"),
+    setupTitle: document.getElementById("setup-title"),
 };
 
 const score = new Score(ui.score);
@@ -80,6 +82,9 @@ for (const [key, definition] of Object.entries(INSTRUMENTS)) {
     option.textContent = definition.label;
     ui.instrument.appendChild(option);
 }
+// Until something is loaded, the setup is the page - no point folding it.
+ui.setupWrap.classList.add("first-run");
+
 // Pick up last session's instrument, so you are not re-choosing it every time.
 const remembered = localStorage.getItem("instrument");
 ui.instrument.value = remembered && remembered in INSTRUMENTS ? remembered : DEFAULT_INSTRUMENT;
@@ -346,6 +351,12 @@ async function post(url, body) {
 function ready(label, loadedTimeline, note = "") {
     player.setTimeline(loadedTimeline);
     setTempo(loadedTimeline);
+
+    // Once there is music on screen it is the point of the page, so the
+    // loading controls fold away above it.
+    ui.setupWrap.classList.remove("first-run");
+    ui.setupWrap.open = false;
+    ui.setupTitle.textContent = "Load something else";
 
     ui.controls.hidden = false;
     document.body.classList.add("has-transport");
