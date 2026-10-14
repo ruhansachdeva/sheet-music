@@ -54,7 +54,11 @@ const questionPanel = new QuestionPanel(ui.questions, { onSubmit: sendAnswers })
 /** What is on screen: a rendered score, or a piano roll for a MIDI file. */
 let view = null;
 let timeline = null;
+
+/** The status line: what kind of message it is showing, and the last summary of
+ *  the loaded piece, which a passing "busy" message is restored to. */
 let statusKind = null;
+let lastInfo = "";
 
 /** The photo or PDF behind the current score, kept so answers can be applied to it. */
 let sourceFile = null;
@@ -395,8 +399,6 @@ function clearStatus() {
     if (lastInfo) setStatus(lastInfo, "info");
     else ui.status.hidden = true;
 }
-
-let lastInfo = "";
 
 // A handle for poking at the running app from the browser console, and for the
 // checks in tools/browser-test.mjs.
