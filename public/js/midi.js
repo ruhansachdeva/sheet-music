@@ -119,11 +119,16 @@ export class PianoRoll {
 function buildTimeline(midi) {
     const notes = [];
     for (const track of midi.tracks) {
+        // Channel 10 is the drum kit: those note numbers are drum sounds, not
+        // pitches, so they play as drums whichever instrument is picked.
+        const isDrumTrack = track.instrument?.percussion === true || track.channel === 9;
+
         for (const note of track.notes) {
             notes.push({
                 time: note.time,
                 duration: note.duration,
                 midi: note.midi,
+                drumKey: isDrumTrack ? note.midi : null,
                 velocity: Math.round((note.velocity ?? 0.8) * 100),
                 step: -1,
             });
