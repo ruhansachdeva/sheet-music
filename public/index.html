@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sheet Music Player</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <header>
+        <h1>Sheet Music Player</h1>
+    </header>
+
+    <main>
+        <section id="upload">
+            <input type="file" id="file" accept=".musicxml,.xml,.mxl,.mid,.midi,image/*,application/pdf" />
+            <select id="instrument">
+                <option value="piano">Piano</option>
+            </select>
+        </section>
+
+        <section id="controls">
+            <button id="play">Play</button>
+            <label><input type="checkbox" id="count-in" /> Count in</label>
+            <label><input type="checkbox" id="metronome" /> Metronome</label>
+        </section>
+
+        <section id="score"></section>
+    </main>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

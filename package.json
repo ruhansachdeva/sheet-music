@@ -1,0 +1,17 @@
+{
+  "name": "sheet-music",
+  "version": "0.1.0",
+  "description": "Upload sheet music, pick an instrument, and play it back with a metronome and note highlighting",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "express": "^5.3.0",
+    "multer": "^2.4.0"
+  }
+}
