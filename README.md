@@ -12,7 +12,7 @@ a metronome, and the current note lit up on the score.
 - **Write it yourself**: a note writer with a piano keyboard, note values, rests,
   dots and undo, which engraves and plays as you write.
 - **Instruments**: piano, violin, cello, flute, clarinet, trumpet, alto sax,
-  tenor sax, guitar, drums.
+  tenor sax, guitar, bass guitar, double bass, drums.
 - **Timing**: tempo, time signatures, dotted notes, ties, triplets and other
   tuplets, rests, repeats, and several voices or staves at once.
 - **Metronome**: separate count-in and during-playback toggles, accented on
@@ -89,7 +89,7 @@ it back.
 violin and flute: same notes, different sound. Switch to clarinet and the
 playback drops a tone (written pitch to concert pitch), as it should: -2
 semitones for clarinet and trumpet, -9 for alto sax, -14 for tenor sax, -12 for
-guitar.
+guitar, bass guitar and double bass.
 
 **Drums** — click *Drum groove*. The notes on the percussion staff are read
 through the score's own `<midi-unpitched>` mapping, so the kick, snare, hi-hat

@@ -389,6 +389,8 @@ async function run() {
                 alto: concertPitch(written, "alto sax"),
                 tenor: concertPitch(written, "tenor sax"),
                 guitar: concertPitch(written, "guitar"),
+                bass: concertPitch(written, "bass"),
+                doubleBass: concertPitch(written, "double bass"),
                 midiFile: concertPitch(written, "clarinet", false),
             };
         `);
@@ -398,6 +400,8 @@ async function run() {
         check("alto sax sounds a major sixth lower", transposed.alto, 63);
         check("tenor sax sounds a ninth lower", transposed.tenor, 58);
         check("guitar sounds an octave lower", transposed.guitar, 60);
+        check("bass sounds an octave lower", transposed.bass, 60);
+        check("double bass sounds an octave lower", transposed.doubleBass, 60);
         check("a MIDI file is never transposed", transposed.midiFile, 72);
 
         console.log("\ndrum mapping");
