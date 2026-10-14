@@ -20,11 +20,19 @@ function toSeconds(wholeNotes, bpm) {
     return (wholeNotes * 4 * 60) / bpm;
 }
 
-/** MIDI number from a written pitch: C4 (MusicXML octave 4) is 60. */
+/**
+ * MIDI number from a written pitch, so that C4 (MusicXML octave 4) is 60.
+ * OSMD stores octaves shifted down by Pitch.OctaveXmlDifference, so that has
+ * to be added back.
+ */
 function midiOf(note) {
     const pitch = note.Pitch;
     if (!pitch) return null;
-    return (pitch.Octave + 1) * 12 + pitch.FundamentalNote + pitch.AccidentalHalfTones;
+
+    const xmlOffset = opensheetmusicdisplay.Pitch?.OctaveXmlDifference ?? 3;
+    return (
+        (pitch.Octave + xmlOffset + 1) * 12 + pitch.FundamentalNote + pitch.AccidentalHalfTones
+    );
 }
 
 /**
