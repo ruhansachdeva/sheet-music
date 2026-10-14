@@ -13,16 +13,18 @@ a metronome, and the current note lit up on the score.
   tuplets, rests, repeats, and several voices or staves at once.
 - **Metronome**: separate count-in and during-playback toggles, accented on
   beat 1, clicking on the time signature's beat.
+- **Controls**: play/pause (or the space bar), stop, a tempo slider that starts
+  at the score's own tempo, a size slider, and the bar you are currently on.
 
 ## Run it
 
-```
+```sh
 npm install
 cp .env.example .env     # add your ANTHROPIC_API_KEY
 npm start
 ```
 
-Then open http://localhost:3000.
+Then open <http://localhost:3000>.
 
 The key is only needed for photos and PDFs. Without it the app still loads
 MusicXML and MIDI, and says so on startup. The key stays on the server: the
@@ -74,6 +76,8 @@ and a kit on channel 10; the channel-10 track plays as drums whichever
 instrument is picked. MIDI is already at concert pitch, so it is never
 transposed.
 
+**Uploading** — use the file picker, or drop a file anywhere on the page.
+
 **Photos and PDFs** (needs a key) — upload a photo of a page, or a PDF. Pick the
 instrument first: it is passed to Claude as context. Claude returns MusicXML plus
 any questions, the score renders, and it plays immediately.
@@ -84,11 +88,19 @@ box, and *Skip*. Answer what you know, press *Send answers to Claude*, and the
 corrected score replaces the old one. Skipped questions keep Claude's best guess.
 *Skip all* dismisses the panel and keeps the score you already have.
 
-Keyboard: space plays and pauses.
+**Keeping a transcription** — *Download MusicXML* next to the title saves what
+is on screen. Worth doing after Claude reads a photo: that transcription is
+otherwise gone on reload.
+
+**Size** — the *Size* slider re-engraves the score between 50% and 200%, keeping
+the cursor where it was. It stretches the piano roll instead for a MIDI file.
+
+Keyboard: space plays and pauses. The instrument you pick is remembered for next
+time.
 
 ## Automated checks
 
-```
+```sh
 npm run check        # every measure in samples/ adds up to its time signature
 npm test             # loads each sample in headless Chrome, checks the timeline
 npm run test:audio   # also plays, and watches the audio clock and cursor
@@ -111,7 +123,7 @@ answer every question with its first option and exercise `/api/refine` too.
 
 ## How it works
 
-```
+```text
 server.js            Express: POST /api/transcribe, POST /api/refine
 lib/claude.js        the Claude call, the prompt, and the response schema
 public/app.js        picks a loader for the file, wires up the controls
