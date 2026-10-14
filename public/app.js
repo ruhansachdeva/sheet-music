@@ -19,6 +19,9 @@ const ui = {
     tempoReset: document.getElementById("tempo-reset"),
     countIn: document.getElementById("count-in"),
     metronome: document.getElementById("metronome"),
+    position: document.getElementById("position"),
+    zoom: document.getElementById("zoom"),
+    zoomValue: document.getElementById("zoom-value"),
     piece: document.getElementById("piece"),
     score: document.getElementById("score"),
     roll: document.getElementById("roll"),
@@ -85,6 +88,13 @@ ui.tempo.addEventListener("input", () => {
 
 ui.tempoReset.addEventListener("click", () => {
     if (timeline) setTempo(timeline);
+});
+
+ui.zoom.addEventListener("change", () => {
+    const percent = Number(ui.zoom.value);
+    ui.zoomValue.textContent = `${percent}%`;
+    if (view === score) score.setZoom(percent / 100);
+    else ui.roll.style.setProperty("--roll-scale", String(percent / 100));
 });
 
 ui.countIn.addEventListener("change", () => player.setOption("countIn", ui.countIn.checked));
@@ -261,12 +271,28 @@ function setTempo(loadedTimeline) {
 function handlePosition(time, step) {
     if (view === score) score.showStep(step);
     else if (view === pianoRoll) pianoRoll.showTime(time);
+    showPosition(time, step);
+}
+
+/** The bar number while a score plays, or the elapsed time for a piano roll. */
+function showPosition(time, step) {
+    if (!timeline) return;
+
+    if (time < 0) {
+        ui.position.textContent = "counting in";
+        return;
+    }
+    const bar = timeline.steps[step]?.measure;
+    ui.position.textContent = bar ? `bar ${bar}` : `${Math.max(time, 0).toFixed(1)}s`;
 }
 
 function handleState(state) {
     ui.play.textContent = state === "playing" ? "Pause" : "Play";
     ui.play.classList.toggle("playing", state === "playing");
-    if (state === "stopped") view?.reset();
+    if (state === "stopped") {
+        view?.reset();
+        if (timeline) ui.position.textContent = timeline.isPianoRoll ? "0.0s" : "bar 1";
+    }
 }
 
 function setStatus(message, kind) {

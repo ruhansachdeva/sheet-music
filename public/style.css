@@ -176,13 +176,38 @@ button.link {
     min-width: 84px;
 }
 
-.tempo {
+.position {
+    align-self: center;
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    min-width: 68px;
+}
+
+.tempo,
+.zoom {
     display: flex;
     align-items: center;
     gap: 10px;
     flex: 1 1 280px;
 }
 
+.zoom {
+    flex: 0 1 190px;
+}
+
+.zoom output {
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    min-width: 44px;
+}
+
+.zoom input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+}
+
+.zoom label,
 .tempo label {
     font-weight: 600;
     font-size: 0.8rem;
@@ -320,9 +345,13 @@ button.link {
 
 /* --- piano roll --------------------------------------------------------- */
 
+.roll {
+    --roll-scale: 1;
+}
+
 .piano-roll {
     width: 100%;
-    height: 340px;
+    height: calc(340px * var(--roll-scale));
     display: block;
 }
 

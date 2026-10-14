@@ -53,14 +53,15 @@
             </div>
         </section>
 
-        <p id="status" class="status" hidden></p>
+        <p id="status" class="status" role="status" aria-live="polite" hidden></p>
 
         <section id="questions" class="questions" hidden></section>
 
         <section id="controls" hidden>
             <div class="transport">
-                <button id="play" class="primary">Play</button>
+                <button id="play" class="primary" aria-keyshortcuts="Space">Play</button>
                 <button id="stop">Stop</button>
+                <output id="position" class="position" aria-live="off">bar 1</output>
             </div>
 
             <div class="tempo">
@@ -73,6 +74,12 @@
             <div class="toggles">
                 <label><input type="checkbox" id="count-in" /> Count in</label>
                 <label><input type="checkbox" id="metronome" /> Metronome</label>
+            </div>
+
+            <div class="zoom">
+                <label for="zoom">Size</label>
+                <input type="range" id="zoom" min="50" max="200" step="10" value="100" />
+                <output id="zoom-value">100%</output>
             </div>
         </section>
 
