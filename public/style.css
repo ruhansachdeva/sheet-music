@@ -2,24 +2,27 @@
    layouts are additions in the media queries at the bottom. */
 
 :root {
-    /* Colour: one accent, one highlight, greys for everything else. */
-    --ink: #0f172a;
-    --ink-soft: #475569;
-    --muted: #64748b;
-    --line: #e2e8f0;
-    --line-strong: #cbd5e1;
-    --surface: #ffffff;
-    --surface-sunk: #f1f5f9;
-    --page: #f8fafc;
-    --accent: #2563eb;
-    --accent-ink: #ffffff;
-    --accent-soft: #eff6ff;
-    --lit: #ea580c;
-    --warn-bg: #fffbeb;
-    --warn-line: #fde68a;
-    --warn-ink: #92400e;
-    --error: #b91c1c;
-    --error-bg: #fef2f2;
+    /* Paper and ink: a warm off-white page, near-black ink with a little
+       warmth in it, and one deep accent. Sheet music is printed on paper, and
+       the app should feel like it belongs on the same desk. */
+    --ink: #1c1917;
+    --ink-soft: #44403c;
+    --muted: #78716c;
+    --line: #e7e2db;
+    --line-strong: #d6cfc5;
+    --surface: #fffdfa;
+    --surface-sunk: #f5f1ea;
+    --page: #f7f4ef;
+    --accent: #4c1d95;
+    --accent-hover: #5b21b6;
+    --accent-ink: #fffdfa;
+    --accent-soft: #f3efff;
+    --lit: #c2410c;
+    --warn-bg: #fdf6e8;
+    --warn-line: #e8d4a8;
+    --warn-ink: #854d0e;
+    --error: #9f1239;
+    --error-bg: #fdf2f5;
 
     /* Type scale. */
     --text-xs: 0.75rem;
@@ -36,10 +39,16 @@
     --s5: 24px;
     --s6: 32px;
 
-    --radius: 12px;
-    --radius-sm: 8px;
-    --shadow: 0 1px 2px rgb(15 23 42 / 6%), 0 1px 3px rgb(15 23 42 / 4%);
-    --shadow-up: 0 -2px 16px rgb(15 23 42 / 10%);
+    /* A serif for the name, a sans for everything you operate. */
+    --font-display: Fraunces, Georgia, "Times New Roman", serif;
+    --font-ui: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+    --radius: 14px;
+    --radius-sm: 10px;
+    /* Warm shadows, so cards sit on paper rather than float on glass. */
+    --shadow: 0 1px 2px rgb(28 25 23 / 5%), 0 2px 8px rgb(28 25 23 / 5%);
+    --shadow-lift: 0 2px 4px rgb(28 25 23 / 6%), 0 8px 24px rgb(28 25 23 / 8%);
+    --shadow-up: 0 -1px 2px rgb(28 25 23 / 4%), 0 -8px 28px rgb(28 25 23 / 10%);
 
     /* Anything you tap is at least this tall. */
     --tap: 44px;
@@ -49,14 +58,22 @@
     box-sizing: border-box;
 }
 
+/* Author styles beat the browser's own [hidden] rule, and this file gives
+   buttons a display value - so hidden has to be restated, or every button
+   that is meant to be hidden shows up. */
+[hidden] {
+    display: none !important;
+}
+
 html {
     -webkit-text-size-adjust: 100%;
 }
 
 body {
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--font-ui);
     font-size: var(--text-base);
-    line-height: 1.5;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
     color: var(--ink);
     background: var(--page);
     margin: 0;
@@ -106,6 +123,15 @@ button,
     justify-content: center;
     gap: var(--s2);
     touch-action: manipulation; /* no double-tap zoom on controls */
+    box-shadow: 0 1px 1px rgb(28 25 23 / 4%);
+    transition: background-color 0.15s ease, border-color 0.15s ease,
+        transform 0.08s ease, box-shadow 0.15s ease;
+}
+
+/* A press should feel like a press. */
+button:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: none;
 }
 
 button:disabled {
@@ -118,6 +144,7 @@ button.primary {
     border-color: var(--accent);
     color: var(--accent-ink);
     font-weight: 600;
+    box-shadow: 0 1px 2px rgb(76 29 149 / 24%), 0 2px 8px rgb(76 29 149 / 16%);
 }
 
 button.link {
@@ -160,30 +187,46 @@ input[type="range"] {
     }
 
     button.primary:hover:not(:disabled) {
-        background: #1d4ed8;
-        border-color: #1d4ed8;
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
     }
 }
 
 /* --- page furniture ------------------------------------------------------ */
 
-header {
-    margin-bottom: var(--s4);
+.masthead {
+    margin-bottom: var(--s5);
 }
 
-header h1 {
-    font-size: var(--text-xl);
-    letter-spacing: -0.01em;
+.brand {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+}
+
+.mark {
+    width: 26px;
+    height: 26px;
+    color: var(--accent);
+    flex: 0 0 auto;
+}
+
+.brand h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.75rem;
+    letter-spacing: -0.015em;
 }
 
 .tagline {
     color: var(--muted);
     font-size: var(--text-sm);
     margin: var(--s1) 0 0;
+    max-width: 46ch;
 }
 
 section {
-    margin-bottom: var(--s4);
+    margin-bottom: var(--s3);
 }
 
 /* --- setup --------------------------------------------------------------- */
@@ -192,8 +235,8 @@ section {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: var(--s4);
+    box-shadow: var(--shadow-lift);
+    padding: var(--s5) var(--s4);
     display: grid;
     gap: var(--s4);
 }
@@ -213,13 +256,13 @@ section {
 /* --- status -------------------------------------------------------------- */
 
 .status {
-    margin: 0 0 var(--s4);
-    padding: var(--s3);
+    margin: 0 0 var(--s3);
+    padding: var(--s2) var(--s3);
     border-radius: var(--radius-sm);
     font-size: var(--text-sm);
-    background: var(--surface);
-    border: 1px solid var(--line);
-    color: var(--ink-soft);
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--muted);
 }
 
 .status.busy {
@@ -244,7 +287,9 @@ section {
     right: 0;
     bottom: 0;
     z-index: 20;
-    background: var(--surface);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid var(--line);
     box-shadow: var(--shadow-up);
     padding: var(--s2) var(--s4);
@@ -414,25 +459,44 @@ body.has-transport {
 .piece {
     display: flex;
     flex-wrap: wrap;
-    align-items: baseline;
+    align-items: center;
     gap: var(--s3);
-    font-weight: 600;
     margin: 0 0 var(--s2);
 }
 
+#piece-name {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
 .download {
-    font-size: var(--text-sm);
-    font-weight: 400;
-    color: var(--accent);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--ink-soft);
+    text-decoration: none;
+    padding: var(--s1) var(--s3);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    white-space: nowrap;
+}
+
+@media (hover: hover) {
+    .download:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+    }
 }
 
 .score,
 .roll {
-    background: var(--surface);
+    background: #fff;
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: var(--s2);
+    box-shadow: var(--shadow-lift);
+    padding: var(--s3) var(--s2);
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
 }
@@ -557,11 +621,18 @@ body.dropping #setup {
     }
 
     .tempo {
-        flex: 1 1 280px;
+        flex: 0 1 340px;
     }
 
     .zoom {
-        flex: 0 1 200px;
+        flex: 0 1 220px;
+    }
+
+    /* The reset links sit under their slider rather than stretching the row. */
+    .tempo #tempo-reset,
+    .zoom #zoom-fit {
+        grid-column: 2 / -1;
+        justify-self: start;
     }
 
     .samples button {
@@ -682,10 +753,10 @@ body.dropping #setup {
     align-items: center;
     gap: var(--s2);
     min-height: var(--tap);
-    padding: 0 var(--s3);
-    font-weight: 600;
+    padding: 0 var(--s4);
+    font-weight: 500;
     font-size: var(--text-sm);
-    color: var(--ink);
+    color: var(--ink-soft);
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius);

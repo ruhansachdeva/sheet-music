@@ -88,6 +88,22 @@ export class Score {
     }
 
     /**
+     * OSMD lays music out as a printed page, with margins to match. Inside a
+     * card on a phone those margins are just empty paper, so they come down.
+     */
+    trimPageMargins() {
+        const rules = this.osmd.EngravingRules;
+        if (!rules) return;
+        // Only the vertical margins come down. Narrowing the horizontal ones
+        // gives the layout engine more room, which it spends packing more bars
+        // onto each system - the opposite of what a phone wants, where fewer
+        // and larger bars per line is what makes it readable.
+        const tight = window.innerWidth < 700;
+        rules.PageTopMargin = tight ? 0.5 : 2;
+        rules.PageBottomMargin = tight ? 0.5 : 2;
+    }
+
+    /**
      * Part names are printed to the left of every system, which is a luxury a
      * phone cannot afford. Returns whether the setting changed.
      */
@@ -158,6 +174,7 @@ export class Score {
 
         this.applyResponsiveOptions();
         await this.osmd.load(content);
+        this.trimPageMargins();
         this.osmd.zoom = 1;
         this.osmd.render();
         if (this.userZoom === null) this.fitToWidth();
