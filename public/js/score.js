@@ -186,6 +186,22 @@ export class Score {
         };
     }
 
+    /** Re-engraves at a new size, keeping the cursor where it was. */
+    setZoom(factor) {
+        if (!this.osmd.Sheet) return;
+        const step = this.stepIndex;
+
+        this.osmd.zoom = factor;
+        this.osmd.render();
+
+        // A re-render replaces the SVG, so the cursor and colours start over.
+        this.litElements = [];
+        this.stepIndex = -1;
+        this.osmd.cursor.reset();
+        this.osmd.cursor.hide();
+        if (step >= 0) this.showStep(step);
+    }
+
     /** Moves the cursor to a step and lights up the notes under it. */
     showStep(index) {
         if (index === this.stepIndex) return;
