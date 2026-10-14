@@ -129,7 +129,7 @@ function buildTimeline(midi) {
                 duration: note.duration,
                 midi: note.midi,
                 drumKey: isDrumTrack ? note.midi : null,
-                velocity: Math.round((note.velocity ?? 0.8) * 100),
+                velocity: Math.round((note.velocity ?? 0.8) * 127),
                 step: -1,
             });
         }
