@@ -670,3 +670,61 @@ body.dropping #setup {
         grid-auto-columns: 1fr;
     }
 }
+
+/* --- the setup folds away once something is loaded ----------------------- */
+
+.setup-wrap {
+    margin-bottom: var(--s4);
+}
+
+.setup-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    min-height: var(--tap);
+    padding: 0 var(--s3);
+    font-weight: 600;
+    font-size: var(--text-sm);
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    list-style: none;
+}
+
+.setup-summary::-webkit-details-marker {
+    display: none;
+}
+
+.setup-summary::after {
+    content: "▾";
+    margin-left: auto;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+}
+
+.setup-wrap[open] .setup-summary {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-color: transparent;
+}
+
+.setup-wrap[open] .setup-summary::after {
+    transform: rotate(180deg);
+}
+
+.setup-wrap[open] #setup {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+/* Nothing is loaded yet, so the fold-away header would just be noise. */
+.setup-wrap.first-run .setup-summary {
+    display: none;
+}
+
+.setup-wrap.first-run #setup {
+    border-radius: var(--radius);
+}
