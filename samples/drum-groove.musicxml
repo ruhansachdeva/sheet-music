@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN"
+    "http://www.musicxml.org/dtds/partwise.dtd">
+<!-- A drum kit part: unpitched notes on a percussion staff, each one pointing at
+     a score-instrument whose <midi-unpitched> says which drum it is. Hi-hat in
+     voice 1, kick and snare in voice 2. -->
+<score-partwise version="3.1">
+  <work>
+    <work-title>Drum Groove</work-title>
+  </work>
+  <part-list>
+    <score-part id="P1">
+      <part-name>Drum Set</part-name>
+      <score-instrument id="P1-I37">
+        <instrument-name>Bass Drum 1</instrument-name>
+      </score-instrument>
+      <score-instrument id="P1-I39">
+        <instrument-name>Acoustic Snare</instrument-name>
+      </score-instrument>
+      <score-instrument id="P1-I43">
+        <instrument-name>Closed Hi-Hat</instrument-name>
+      </score-instrument>
+      <score-instrument id="P1-I50">
+        <instrument-name>Crash Cymbal 1</instrument-name>
+      </score-instrument>
+      <!-- midi-unpitched counts from 1, so 37 is MIDI note 36, the bass drum. -->
+      <midi-instrument id="P1-I37">
+        <midi-channel>10</midi-channel>
+        <midi-unpitched>37</midi-unpitched>
+      </midi-instrument>
+      <midi-instrument id="P1-I39">
+        <midi-channel>10</midi-channel>
+        <midi-unpitched>39</midi-unpitched>
+      </midi-instrument>
+      <midi-instrument id="P1-I43">
+        <midi-channel>10</midi-channel>
+        <midi-unpitched>43</midi-unpitched>
+      </midi-instrument>
+      <midi-instrument id="P1-I50">
+        <midi-channel>10</midi-channel>
+        <midi-unpitched>50</midi-unpitched>
+      </midi-instrument>
+    </score-part>
+  </part-list>
+
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>percussion</sign><line>2</line></clef>
+      </attributes>
+      <direction placement="above">
+        <direction-type>
+          <metronome><beat-unit>quarter</beat-unit><per-minute>100</per-minute></metronome>
+        </direction-type>
+        <sound tempo="100"/>
+      </direction>
+
+      <!-- Hi-hat: eight eighths, stems up. -->
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+
+      <backup><duration>1920</duration></backup>
+
+      <!-- Kick on 1 and 3, snare on 2 and 4, stems down. -->
+      <note>
+        <unpitched><display-step>F</display-step><display-octave>4</display-octave></unpitched>
+        <duration>480</duration><instrument id="P1-I37"/><voice>2</voice><type>quarter</type>
+        <stem>down</stem>
+      </note>
+      <note>
+        <unpitched><display-step>C</display-step><display-octave>5</display-octave></unpitched>
+        <duration>480</duration><instrument id="P1-I39"/><voice>2</voice><type>quarter</type>
+        <stem>down</stem>
+      </note>
+      <note>
+        <unpitched><display-step>F</display-step><display-octave>4</display-octave></unpitched>
+        <duration>480</duration><instrument id="P1-I37"/><voice>2</voice><type>quarter</type>
+        <stem>down</stem>
+      </note>
+      <note>
+        <unpitched><display-step>C</display-step><display-octave>5</display-octave></unpitched>
+        <duration>480</duration><instrument id="P1-I39"/><voice>2</voice><type>quarter</type>
+        <stem>down</stem>
+      </note>
+    </measure>
+
+    <measure number="2">
+      <!-- A crash on beat 1 replaces the first hi-hat. -->
+      <note>
+        <unpitched><display-step>A</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I50"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+      <note>
+        <unpitched><display-step>G</display-step><display-octave>5</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I43"/><voice>1</voice><type>eighth</type>
+        <stem>up</stem><notehead>x</notehead>
+      </note>
+
+      <backup><duration>1920</duration></backup>
+
+      <note>
+        <unpitched><display-step>F</display-step><display-octave>4</display-octave></unpitched>
+        <duration>480</duration><instrument id="P1-I37"/><voice>2</voice><type>quarter</type>
+        <stem>down</stem>
+      </note>
+      <note>
+        <unpitched><display-step>C</display-step><display-octave>5</display-octave></unpitched>
+        <duration>480</duration><instrument id="P1-I39"/><voice>2</voice><type>quarter</type>
+        <stem>down</stem>
+      </note>
+      <note>
+        <unpitched><display-step>F</display-step><display-octave>4</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I37"/><voice>2</voice><type>eighth</type>
+        <stem>down</stem>
+      </note>
+      <note>
+        <unpitched><display-step>F</display-step><display-octave>4</display-octave></unpitched>
+        <duration>240</duration><instrument id="P1-I37"/><voice>2</voice><type>eighth</type>
+        <stem>down</stem>
+      </note>
+      <note>
+        <unpitched><display-step>C</display-step><display-octave>5</display-octave></unpitched>
+        <duration>480</duration><instrument id="P1-I39"/><voice>2</voice><type>quarter</type>
+        <stem>down</stem>
+      </note>
+      <barline location="right">
+        <bar-style>light-heavy</bar-style>
+      </barline>
+    </measure>
+  </part>
+</score-partwise>
