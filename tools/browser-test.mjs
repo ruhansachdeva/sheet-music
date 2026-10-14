@@ -353,6 +353,21 @@ async function run() {
         `);
         check("laid out at a sensible width", engraving.width > 400, true);
         check("and a sensible height", engraving.height > 100, true);
+
+        // Zooming re-engraves the score, which replaces the SVG the cursor and
+        // the note colours live in.
+        const zoomed = await page.evaluate(`
+            const { score } = window.sheetMusic;
+            score.showStep(3);
+            score.setZoom(0.6);
+            const small = document.querySelector("#score svg").getBoundingClientRect().height;
+            score.setZoom(1);
+            const back = document.querySelector("#score svg").getBoundingClientRect().height;
+            return { small, back, step: score.stepIndex, lit: document.querySelectorAll(".note-lit").length };
+        `);
+        check("zooming out makes the engraving smaller", zoomed.small < zoomed.back, true);
+        check("the cursor keeps its place across a re-render", zoomed.step, 3);
+        check("and the notes are still lit", zoomed.lit > 0, true);
         check(
             "notes light up under the cursor",
             await page.evaluate(`
