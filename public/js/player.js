@@ -90,11 +90,16 @@ export class Player {
             return;
         }
 
-        this.onInstrumentLoading(true);
+        this.onInstrumentLoading(true, { instrument: definition.label, progress: 0 });
         try {
             const instrument = Soundfont(ctx, {
                 instrument: definition.soundfont,
                 volume: 100,
+                onLoadProgress: ({ loaded, total }) =>
+                    this.onInstrumentLoading(true, {
+                        instrument: definition.label,
+                        progress: total ? loaded / total : 0,
+                    }),
             });
             await instrument.ready;
             // A slow network can finish a load the user has already moved on from.
@@ -104,6 +109,8 @@ export class Player {
             }
             this.melodic?.dispose();
             this.melodic = instrument;
+        } catch (error) {
+            throw new Error(`Could not load the ${definition.label} samples: ${error.message}`);
         } finally {
             this.onInstrumentLoading(false);
         }
@@ -114,12 +121,21 @@ export class Player {
     async loadDrums() {
         if (this.drumMachine) return;
 
-        this.onInstrumentLoading(true);
+        this.onInstrumentLoading(true, { instrument: "drums", progress: 0 });
         try {
-            const machine = DrumMachine(this.audioContext(), { instrument: DRUM_MACHINE });
+            const machine = DrumMachine(this.audioContext(), {
+                instrument: DRUM_MACHINE,
+                onLoadProgress: ({ loaded, total }) =>
+                    this.onInstrumentLoading(true, {
+                        instrument: "drums",
+                        progress: total ? loaded / total : 0,
+                    }),
+            });
             await machine.ready;
             this.drumMachine = machine;
             this.drumNames = machine.getGroupNames();
+        } catch (error) {
+            throw new Error(`Could not load the drum samples: ${error.message}`);
         } finally {
             this.onInstrumentLoading(false);
         }
