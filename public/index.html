@@ -24,7 +24,7 @@
     <main>
         <section id="setup">
             <div class="field">
-                <label for="file">Sheet music</label>
+                <label class="label" for="file">Sheet music</label>
                 <input
                     type="file"
                     id="file"
@@ -37,13 +37,13 @@
             </div>
 
             <div class="field">
-                <label for="instrument">Instrument</label>
+                <label class="label" for="instrument">Instrument</label>
                 <select id="instrument"></select>
                 <p class="hint">Sets the playback sound, and tells Claude what it is reading.</p>
             </div>
 
             <div class="field">
-                <label>Or try a sample</label>
+                <span class="label">Or try a sample</span>
                 <div class="samples">
                     <button data-sample="twinkle.musicxml">Twinkle (piano)</button>
                     <button data-sample="timing-test.musicxml">Timing test</button>
@@ -66,8 +66,8 @@
             </div>
 
             <div class="tempo">
-                <label for="tempo">Tempo</label>
-                <input type="range" id="tempo" min="30" max="240" step="1" value="100" />
+                <span class="label" id="tempo-label">Tempo</span>
+                <input type="range" id="tempo" min="30" max="240" step="1" value="100" aria-labelledby="tempo-label" />
                 <output id="tempo-value">100 BPM</output>
                 <button id="tempo-reset" class="link" hidden>Reset to score tempo</button>
             </div>
@@ -78,8 +78,8 @@
             </div>
 
             <div class="zoom">
-                <label for="zoom">Size</label>
-                <input type="range" id="zoom" min="50" max="200" step="10" value="100" />
+                <span class="label" id="zoom-label">Size</span>
+                <input type="range" id="zoom" min="50" max="200" step="10" value="100" aria-labelledby="zoom-label" />
                 <output id="zoom-value">100%</output>
             </div>
         </section>
