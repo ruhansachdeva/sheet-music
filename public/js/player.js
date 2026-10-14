@@ -8,7 +8,7 @@
 // and read the same audio clock, so sound and highlighting stay together.
 
 import { Soundfont, DrumMachine } from "https://cdn.jsdelivr.net/npm/smplr@1.1.0/+esm";
-import { INSTRUMENTS } from "./instruments.js";
+import { INSTRUMENTS, concertPitch } from "./instruments.js";
 import { DRUM_MACHINE, resolveDrumName } from "./drums.js";
 
 /** How far ahead to schedule. Below smplr's own 200 ms lookahead, so that
@@ -152,7 +152,8 @@ export class Player {
         const withCountIn = this.options.countIn && this.state !== "paused";
 
         this.scale = this.timeline.bpm / this.tempo;
-        const countInLength = withCountIn ? -this.timeline.countIn[0].time : 0;
+        const countInLength =
+            withCountIn && this.timeline.countIn.length ? -this.timeline.countIn[0].time : 0;
         this.musicStart = ctx.currentTime + LEAD_IN + (countInLength - startAt) * this.scale;
 
         this.rebuildQueue(startAt, withCountIn);
@@ -257,9 +258,8 @@ export class Player {
         }
 
         if (!this.melodic) return;
-        const shift = this.transposeEnabled ? definition.transpose ?? 0 : 0;
         this.melodic.start({
-            note: note.midi + shift,
+            note: concertPitch(note.midi, this.instrumentKey, this.transposeEnabled),
             time: when,
             duration: note.duration * this.scale,
             velocity: note.velocity ?? 100,

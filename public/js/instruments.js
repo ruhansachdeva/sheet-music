@@ -15,3 +15,13 @@ export const INSTRUMENTS = {
 };
 
 export const DEFAULT_INSTRUMENT = "piano";
+
+/**
+ * Written pitch to the pitch that should sound. A clarinet's written C sounds a
+ * tone lower, so playback shifts it; MIDI files are already at concert pitch,
+ * which is what `transposing: false` says.
+ */
+export function concertPitch(midi, instrumentKey, transposing = true) {
+    if (!transposing) return midi;
+    return midi + (INSTRUMENTS[instrumentKey]?.transpose ?? 0);
+}
