@@ -429,3 +429,9 @@ button.link {
     font-weight: 400;
     color: var(--accent);
 }
+
+/* While a file is being dragged over the page. */
+body.dropping #setup {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}

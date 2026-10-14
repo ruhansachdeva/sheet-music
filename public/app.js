@@ -86,6 +86,25 @@ for (const button of ui.samples) {
     button.addEventListener("click", () => loadSample(button.dataset.sample));
 }
 
+// Dropping a file anywhere on the page loads it.
+document.addEventListener("dragover", (event) => {
+    if (!event.dataTransfer?.types.includes("Files")) return;
+    event.preventDefault();
+    document.body.classList.add("dropping");
+});
+
+document.addEventListener("dragleave", (event) => {
+    if (event.relatedTarget === null) document.body.classList.remove("dropping");
+});
+
+document.addEventListener("drop", (event) => {
+    const file = event.dataTransfer?.files?.[0];
+    if (!file) return;
+    event.preventDefault();
+    document.body.classList.remove("dropping");
+    loadFile(file);
+});
+
 ui.play.addEventListener("click", () => Promise.resolve(player.toggle()).catch(reportError));
 ui.stop.addEventListener("click", () => player.stop());
 
