@@ -70,10 +70,13 @@ for (const [key, definition] of Object.entries(INSTRUMENTS)) {
     option.textContent = definition.label;
     ui.instrument.appendChild(option);
 }
-ui.instrument.value = DEFAULT_INSTRUMENT;
-player.setInstrument(DEFAULT_INSTRUMENT);
+// Pick up last session's instrument, so you are not re-choosing it every time.
+const remembered = localStorage.getItem("instrument");
+ui.instrument.value = remembered && remembered in INSTRUMENTS ? remembered : DEFAULT_INSTRUMENT;
+player.setInstrument(ui.instrument.value).catch(reportError);
 
 ui.instrument.addEventListener("change", () => {
+    localStorage.setItem("instrument", ui.instrument.value);
     player.setInstrument(ui.instrument.value).catch(reportError);
 });
 
@@ -143,6 +146,12 @@ function reportError(error) {
     console.error(error);
     setStatus(error.message, "error");
 }
+
+// There is no build step and no framework here, so an unexpected error would
+// otherwise only show up in the console.
+window.addEventListener("unhandledrejection", (event) => {
+    reportError(event.reason instanceof Error ? event.reason : new Error(String(event.reason)));
+});
 
 // --- loading ----------------------------------------------------------------
 
@@ -230,7 +239,14 @@ async function transcribe(file) {
     body.append("file", file);
     body.append("instrument", ui.instrument.value);
 
-    const result = await post("/api/transcribe", body);
+    // One read at a time: a second upload mid-request would race the first.
+    setUploadsEnabled(false);
+    let result;
+    try {
+        result = await post("/api/transcribe", body);
+    } finally {
+        setUploadsEnabled(true);
+    }
     await showScore(result.musicxml, result.title);
     sourceFile = file;
     ui.pieceName.textContent = result.title ? `${result.title} — read by Claude` : "Read by Claude";
@@ -244,6 +260,7 @@ async function sendAnswers(answers) {
     questionPanel.setBusy(true);
     setStatus("Claude is applying your answers…", "busy");
 
+    setUploadsEnabled(false);
     try {
         const body = new FormData();
         body.append("file", sourceFile);
@@ -260,7 +277,13 @@ async function sendAnswers(answers) {
         setStatus(`Could not apply the answers: ${error.message}`, "error");
     } finally {
         questionPanel.setBusy(false);
+        setUploadsEnabled(true);
     }
+}
+
+function setUploadsEnabled(enabled) {
+    ui.file.disabled = !enabled;
+    for (const button of ui.samples) button.disabled = !enabled;
 }
 
 async function post(url, body) {
