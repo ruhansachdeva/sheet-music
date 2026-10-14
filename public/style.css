@@ -1,10 +1,399 @@
+:root {
+    --ink: #111827;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --surface: #ffffff;
+    --page: #f7f7f8;
+    --accent: #2563eb;
+    --accent-soft: #eff6ff;
+    --lit: #c2410c;
+    --warn-bg: #fffbeb;
+    --warn-line: #fcd34d;
+    --error: #b91c1c;
+    --radius: 10px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
 body {
-    font-family: system-ui, sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--ink);
+    background: var(--page);
     margin: 0 auto;
     max-width: 1100px;
-    padding: 16px;
+    padding: 24px 16px 64px;
+    line-height: 1.5;
+}
+
+header h1 {
+    font-size: 1.5rem;
+    margin: 0 0 4px;
+}
+
+.tagline {
+    color: var(--muted);
+    margin: 0 0 20px;
 }
 
 section {
     margin-bottom: 16px;
+}
+
+/* --- upload row --------------------------------------------------------- */
+
+#setup {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+}
+
+.field label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 6px;
+}
+
+.hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin: 6px 0 0;
+}
+
+input[type="file"],
+select {
+    width: 100%;
+    font: inherit;
+    padding: 7px 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+.samples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* --- buttons ------------------------------------------------------------ */
+
+button {
+    font: inherit;
+    padding: 7px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+    border-color: #d1d5db;
+    background: #fafafa;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+}
+
+button.primary:hover:not(:disabled) {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+}
+
+button.link {
+    border: none;
+    background: none;
+    color: var(--accent);
+    padding: 0;
+    font-size: 0.85rem;
+}
+
+/* --- status ------------------------------------------------------------- */
+
+.status {
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--muted);
+}
+
+.status.busy {
+    background: var(--accent-soft);
+    border-color: #bfdbfe;
+    color: #1e40af;
+}
+
+.status.error {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: var(--error);
+}
+
+/* --- transport ---------------------------------------------------------- */
+
+#controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 20px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.transport {
+    display: flex;
+    gap: 8px;
+}
+
+#play {
+    min-width: 84px;
+}
+
+.tempo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1 1 280px;
+}
+
+.tempo label {
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+}
+
+.tempo input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+}
+
+#tempo-value {
+    font-variant-numeric: tabular-nums;
+    min-width: 72px;
+    font-size: 0.9rem;
+}
+
+.toggles {
+    display: flex;
+    gap: 16px;
+}
+
+.toggles label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.toggles input {
+    accent-color: var(--accent);
+}
+
+/* --- questions ---------------------------------------------------------- */
+
+.questions {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-line);
+    border-radius: var(--radius);
+    padding: 16px;
+}
+
+.questions-head h2 {
+    font-size: 1rem;
+    margin: 0 0 4px;
+}
+
+.questions-head p {
+    margin: 0 0 12px;
+    font-size: 0.875rem;
+    color: #92400e;
+}
+
+.question {
+    background: var(--surface);
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+}
+
+.question-text {
+    margin: 0 0 10px;
+}
+
+.measure {
+    display: inline-block;
+    background: #fef3c7;
+    border-radius: 5px;
+    padding: 1px 6px;
+    margin-right: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #92400e;
+}
+
+.choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.choice.chosen {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.choice.skip {
+    color: var(--muted);
+}
+
+.free-text {
+    width: 100%;
+    font: inherit;
+    font-size: 0.9rem;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+.questions-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* --- score and piano roll ----------------------------------------------- */
+
+.piece {
+    font-weight: 600;
+    margin: 0 0 8px;
+}
+
+.score,
+.roll {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 8px;
+    overflow-x: auto;
+}
+
+.score:empty {
+    display: none;
+}
+
+/* The note under the cursor. A CSS rule beats VexFlow's fill attributes, so
+   this recolours notes without a re-render. */
+.note-lit path,
+.note-lit text,
+.note-lit rect {
+    fill: var(--lit);
+    stroke: var(--lit);
+}
+
+/* --- piano roll --------------------------------------------------------- */
+
+.piano-roll {
+    width: 100%;
+    height: 340px;
+    display: block;
+}
+
+.roll-row {
+    fill: #f3f4f6;
+}
+
+.roll-bar {
+    stroke: var(--line);
+    stroke-width: 1;
+}
+
+.roll-note {
+    fill: #93c5fd;
+}
+
+.roll-note.lit {
+    fill: var(--lit);
+}
+
+.roll-playhead {
+    stroke: var(--accent);
+    stroke-width: 1.5;
+}
+
+.roll-playhead.hidden {
+    visibility: hidden;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --ink: #f3f4f6;
+        --muted: #9ca3af;
+        --line: #374151;
+        --surface: #1f2937;
+        --page: #111827;
+        --accent: #60a5fa;
+        --accent-soft: #1e3a5f;
+        --lit: #fb923c;
+        --warn-bg: #2d2416;
+        --warn-line: #a16207;
+    }
+
+    /* The engraving itself stays on white paper, which is what sheet music
+       looks like - only the surrounding page goes dark. */
+    .score {
+        background: #fff;
+    }
+
+    .question {
+        border-color: #a16207;
+    }
+
+    .measure {
+        background: #422006;
+        color: #fcd34d;
+    }
+
+    .questions-head p {
+        color: #fcd34d;
+    }
+
+    .roll-row {
+        fill: #273244;
+    }
+
+    .roll-note {
+        fill: #3b82f6;
+    }
 }
