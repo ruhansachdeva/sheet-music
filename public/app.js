@@ -407,7 +407,8 @@ function ready(label, loadedTimeline, note = "") {
     const tempoNote = loadedTimeline.scoreBpm
         ? `score tempo ${loadedTimeline.scoreBpm} BPM`
         : "no tempo marking, defaulting to 100 BPM";
-    const parts = [`${loadedTimeline.notes.length} notes`, tempoNote];
+    const count = loadedTimeline.notes.length;
+    const parts = [`${count} ${count === 1 ? "note" : "notes"}`, tempoNote];
     if (note) parts.push(note);
     setStatus(parts.join(" · "), "info");
 }

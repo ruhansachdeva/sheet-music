@@ -18,6 +18,9 @@
     --accent-ink: #fffdfa;
     --accent-soft: #f3efff;
     --lit: #c2410c;
+    /* A keyboard is white and black in any theme, so these never flip. */
+    --key-white: #fffdfa;
+    --key-black: #1c1917;
     --warn-bg: #fdf6e8;
     --warn-line: #e8d4a8;
     --warn-ink: #854d0e;
@@ -662,24 +665,29 @@ body.dropping #setup {
 
 @media (prefers-color-scheme: dark) {
     :root {
-        --ink: #f1f5f9;
-        --ink-soft: #cbd5e1;
-        --muted: #94a3b8;
-        --line: #334155;
-        --line-strong: #475569;
-        --surface: #1e293b;
-        --surface-sunk: #0f172a;
-        --page: #0b1220;
-        --accent: #3b82f6;
-        --accent-soft: #1e3a5f;
+        /* The same warm paper, turned down: browns and umbers rather than
+           slate, so the two themes feel like one object under two lights. */
+        --ink: #f5f1ec;
+        --ink-soft: #d6cec4;
+        --muted: #a39a8e;
+        --line: #35302b;
+        --line-strong: #4a443d;
+        --surface: #221e1a;
+        --surface-sunk: #171310;
+        --page: #14100e;
+        --accent: #a78bfa;
+        --accent-hover: #c4b5fd;
+        --accent-ink: #1a1510;
+        --accent-soft: #2b2340;
         --lit: #fb923c;
-        --warn-bg: #2a2416;
-        --warn-line: #854d0e;
-        --warn-ink: #fcd34d;
+        --warn-bg: #2a2317;
+        --warn-line: #6b5420;
+        --warn-ink: #e8c87a;
         --error: #fca5a5;
-        --error-bg: #2a1616;
-        --shadow: 0 1px 2px rgb(0 0 0 / 40%);
-        --shadow-up: 0 -2px 16px rgb(0 0 0 / 50%);
+        --error-bg: #2a1a1a;
+        --shadow: 0 1px 2px rgb(0 0 0 / 50%);
+        --shadow-lift: 0 2px 4px rgb(0 0 0 / 40%), 0 10px 28px rgb(0 0 0 / 45%);
+        --shadow-up: 0 -1px 2px rgb(0 0 0 / 40%), 0 -8px 28px rgb(0 0 0 / 55%);
     }
 
     /* Sheet music stays on white paper, which is what it looks like. */
@@ -693,6 +701,15 @@ body.dropping #setup {
 
     .roll-note.drum {
         fill: #818cf8;
+    }
+
+    button.primary {
+        box-shadow: 0 1px 2px rgb(0 0 0 / 40%);
+    }
+
+    /* On a dark card a black key would vanish, so give it an edge. */
+    .key.black {
+        border-color: var(--line-strong);
     }
 }
 
@@ -933,14 +950,15 @@ body.dropping #setup {
 }
 
 .key.white {
-    background: #fffdfa;
-    color: var(--ink-soft);
+    background: var(--key-white);
+    color: #57534e;
+    border-color: #d6cfc5;
 }
 
 .key.black {
-    background: var(--ink);
-    color: #fffdfa;
-    border-color: var(--ink);
+    background: var(--key-black);
+    color: var(--key-white);
+    border-color: var(--key-black);
     height: 62%;
     align-self: start;
 }
