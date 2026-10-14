@@ -12,7 +12,8 @@
     "test:audio": "node tools/browser-test.mjs --audio",
     "make-midi": "node tools/make-midi-sample.mjs",
     "test:transcribe": "node --env-file-if-exists=.env tools/transcribe-test.mjs",
-    "test:editor": "node tools/editor-test.mjs"
+    "test:editor": "node tools/editor-test.mjs",
+    "test:api": "node tools/api-test.mjs"
   },
   "license": "ISC",
   "dependencies": {

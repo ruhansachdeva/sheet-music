@@ -7,28 +7,19 @@ import {
     currentProvider,
     requireProvider,
 } from "./lib/transcriber.js";
+// The same table the browser builds its picker from, so the two cannot drift:
+// adding an instrument in one place used to leave the other rejecting it.
+import { INSTRUMENTS } from "./public/js/instruments.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-const INSTRUMENTS = [
-    "piano",
-    "violin",
-    "cello",
-    "flute",
-    "clarinet",
-    "trumpet",
-    "alto sax",
-    "tenor sax",
-    "guitar",
-];
 
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 25 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
         const ok = file.mimetype === "application/pdf" || file.mimetype.startsWith("image/");
-        cb(ok ? null : new TranscribeError("Only images and PDFs are sent to Claude.", 400), ok);
+        cb(ok ? null : new TranscribeError("Only images and PDFs can be read.", 400), ok);
     },
 });
 
@@ -38,7 +29,7 @@ app.use("/samples", express.static("samples"));
 
 function readInstrument(body) {
     const instrument = String(body.instrument || "piano").toLowerCase();
-    if (!INSTRUMENTS.includes(instrument)) {
+    if (!Object.hasOwn(INSTRUMENTS, instrument)) {
         throw new TranscribeError(`Unknown instrument: ${instrument}`, 400);
     }
     return instrument;
