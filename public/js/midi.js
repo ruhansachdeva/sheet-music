@@ -6,6 +6,14 @@ import { Midi } from "https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/+esm";
 
 const DEFAULT_BPM = 100;
 
+/** Roll geometry, in the SVG's own units. */
+const WIDTH = 1000;
+const GUTTER = 40; // room on the left for the octave labels
+const ROW = 8;
+
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const BLACK_KEYS = [1, 3, 6, 8, 10];
+
 export class PianoRoll {
     constructor(container) {
         this.container = container;
@@ -35,63 +43,88 @@ export class PianoRoll {
         const high = Math.max(...pitches, 72) + 2;
         const rows = Math.max(high - low + 1, 12);
 
+        this.high = high;
+        const height = rows * ROW;
+
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.setAttribute("class", "piano-roll");
-        svg.setAttribute("viewBox", `0 0 1000 ${rows * 8}`);
+        svg.setAttribute("viewBox", `0 0 ${WIDTH} ${height}`);
         svg.setAttribute("preserveAspectRatio", "none");
 
-        // A faint stripe behind every black key, so the pitches stay readable.
+        const add = (name, attributes, text) => {
+            const element = document.createElementNS("http://www.w3.org/2000/svg", name);
+            for (const [key, value] of Object.entries(attributes)) {
+                element.setAttribute(key, value);
+            }
+            if (text !== undefined) element.textContent = text;
+            svg.appendChild(element);
+            return element;
+        };
+
         for (let midi = low; midi <= high; midi++) {
-            if (![1, 3, 6, 8, 10].includes(((midi % 12) + 12) % 12)) continue;
-            const row = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-            row.setAttribute("x", 0);
-            row.setAttribute("y", (high - midi) * 8);
-            row.setAttribute("width", 1000);
-            row.setAttribute("height", 8);
-            row.setAttribute("class", "roll-row");
-            svg.appendChild(row);
+            const pitchClass = ((midi % 12) + 12) % 12;
+            const y = (high - midi) * ROW;
+
+            // A faint stripe behind every black key, so the pitches stay readable.
+            if (BLACK_KEYS.includes(pitchClass)) {
+                add("rect", { x: GUTTER, y, width: WIDTH - GUTTER, height: ROW, class: "roll-row" });
+            }
+            // Label each C, and draw its line, so the pitches can be read off.
+            if (pitchClass === 0) {
+                add("line", {
+                    x1: GUTTER,
+                    x2: WIDTH,
+                    y1: y + ROW,
+                    y2: y + ROW,
+                    class: "roll-octave",
+                });
+                add(
+                    "text",
+                    { x: GUTTER - 6, y: y + ROW - 1.5, class: "roll-label" },
+                    `${NOTE_NAMES[pitchClass]}${Math.floor(midi / 12) - 1}`,
+                );
+            }
         }
 
         // A bar line per metronome accent gives the roll a sense of metre.
         for (const beat of timeline.beats) {
             if (!beat.accent) continue;
-            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-            const x = (beat.time / this.duration) * 1000;
-            line.setAttribute("x1", x);
-            line.setAttribute("x2", x);
-            line.setAttribute("y1", 0);
-            line.setAttribute("y2", rows * 8);
-            line.setAttribute("class", "roll-bar");
-            svg.appendChild(line);
+            const x = this.xFor(beat.time);
+            add("line", { x1: x, x2: x, y1: 0, y2: height, class: "roll-bar" });
         }
 
         for (const note of timeline.notes) {
-            const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-            rect.setAttribute("x", (note.time / this.duration) * 1000);
-            rect.setAttribute("y", (high - note.midi) * 8 + 1);
-            rect.setAttribute("width", Math.max((note.duration / this.duration) * 1000, 1.5));
-            rect.setAttribute("height", 6);
-            rect.setAttribute("rx", 1.5);
-            rect.setAttribute("class", "roll-note");
-            svg.appendChild(rect);
+            const x = this.xFor(note.time);
+            const rect = add("rect", {
+                x,
+                y: (high - note.midi) * ROW + 1,
+                width: Math.max(this.xFor(note.time + note.duration) - x, 1.5),
+                height: ROW - 2,
+                rx: 1.5,
+                class: note.drumKey !== null ? "roll-note drum" : "roll-note",
+            });
             this.noteElements.push({ element: rect, note });
         }
 
-        const playhead = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        playhead.setAttribute("y1", 0);
-        playhead.setAttribute("y2", rows * 8);
-        playhead.setAttribute("class", "roll-playhead");
-        playhead.setAttribute("x1", 0);
-        playhead.setAttribute("x2", 0);
-        svg.appendChild(playhead);
-        this.playhead = playhead;
+        this.playhead = add("line", {
+            x1: GUTTER,
+            x2: GUTTER,
+            y1: 0,
+            y2: height,
+            class: "roll-playhead",
+        });
 
         this.container.appendChild(svg);
     }
 
+    /** Time in reference seconds to an x position in the roll. */
+    xFor(time) {
+        return GUTTER + (Math.max(time, 0) / this.duration) * (WIDTH - GUTTER);
+    }
+
     /** Lights up whatever is sounding at `time` (in reference seconds). */
     showTime(time) {
-        const x = (Math.max(time, 0) / this.duration) * 1000;
+        const x = this.xFor(time);
         this.playhead?.setAttribute("x1", x);
         this.playhead?.setAttribute("x2", x);
         this.playhead?.classList.toggle("hidden", time < 0);

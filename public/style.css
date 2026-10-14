@@ -368,6 +368,22 @@ button.link {
     fill: #93c5fd;
 }
 
+.roll-note.drum {
+    fill: #a7a3f3;
+}
+
+.roll-octave {
+    stroke: var(--line);
+    stroke-width: 0.5;
+}
+
+.roll-label {
+    fill: var(--muted);
+    font-size: 7px;
+    font-family: system-ui, sans-serif;
+    text-anchor: end;
+}
+
 .roll-note.lit {
     fill: var(--lit);
 }
