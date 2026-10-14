@@ -505,6 +505,7 @@ function clearStatus() {
 // checks in tools/browser-test.mjs.
 window.sheetMusic = {
     player,
+    editor,
     score,
     pianoRoll,
     get timeline() {

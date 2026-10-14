@@ -428,6 +428,69 @@ async function run() {
         check("C5 is the snare", kit.staffSnare, 38);
         check("G5 above the staff is the hi-hat", kit.staffHat, 42);
 
+        // --- writing a score by hand ----------------------------------------
+        console.log("\nwriting a score");
+        const written = await page.evaluate(`
+            document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 200));
+
+            const key = (name) =>
+                [...document.querySelectorAll(".key")]
+                    .find((k) => k.getAttribute("aria-label") === name);
+            const lengths = [...document.querySelectorAll(".length")];
+
+            // A quarter C, a quarter E, then a half G.
+            key("C4").click();
+            key("E4").click();
+            lengths[1].click();          // half note
+            key("G4").click();
+            await new Promise((r) => setTimeout(r, 400));
+
+            const timeline = window.sheetMusic.timeline;
+            const xml = window.sheetMusic.editor.toMusicXml();
+            return {
+                open: !document.getElementById("editor").hidden,
+                midis: timeline.notes.map((n) => n.midi),
+                durations: timeline.notes.map((n) => Math.round(n.duration * 100) / 100),
+                xmlIsScore: xml.includes("<score-partwise"),
+                measures: timeline.measureCount,
+            };
+        `);
+        check("the writer opens", written.open, true);
+        check("the notes tapped are the notes written", written.midis, [60, 64, 67]);
+        // 100 BPM: a quarter is 0.6s and a half is 1.2s.
+        check("with the lengths chosen", written.durations, [0.6, 0.6, 1.2]);
+        check("it produces a score", written.xmlIsScore, true);
+
+        const edited = await page.evaluate(`
+            const editor = window.sheetMusic.editor;
+            editor.undo();
+            await new Promise((r) => setTimeout(r, 300));
+            const afterUndo = window.sheetMusic.timeline.notes.length;
+
+            editor.addRest();
+            await new Promise((r) => setTimeout(r, 300));
+            const withRest = window.sheetMusic.timeline.notes.length;
+
+            editor.clear();
+            await new Promise((r) => setTimeout(r, 300));
+            const afterClear = window.sheetMusic.timeline.notes.length;
+
+            document.querySelector(".editor-head .primary").click();
+            return {
+                afterUndo,
+                withRest,
+                afterClear,
+                closed: document.getElementById("editor").hidden,
+                canReopen: !document.getElementById("edit-score").hidden,
+            };
+        `);
+        check("undo removes the last note", edited.afterUndo, 2);
+        check("a rest adds no sounding note", edited.withRest, 2);
+        check("clear empties it", edited.afterClear, 0);
+        check("Done closes the writer", edited.closed, true);
+        check("and it can be reopened", edited.canReopen, true);
+
         // --- the clarifying question panel ----------------------------------
         console.log("\nclarifying questions");
         const asked = await page.evaluate(`
