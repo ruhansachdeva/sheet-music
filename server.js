@@ -1,14 +1,117 @@
 import express from "express";
+import multer from "multer";
+import { transcribe, refine, TranscribeError } from "./lib/claude.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const INSTRUMENTS = [
+    "piano",
+    "violin",
+    "cello",
+    "flute",
+    "clarinet",
+    "trumpet",
+    "alto sax",
+    "tenor sax",
+    "guitar",
+];
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 25 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        const ok = file.mimetype === "application/pdf" || file.mimetype.startsWith("image/");
+        cb(ok ? null : new TranscribeError("Only images and PDFs are sent to Claude.", 400), ok);
+    },
+});
+
 app.use(express.json({ limit: "20mb" }));
 app.use(express.static("public"));
+app.use("/samples", express.static("samples"));
 
-// TODO: POST /api/transcribe - send an uploaded photo/PDF to Claude, get MusicXML
-// back plus any clarifying questions (e.g. "is this a tie?")
+function readInstrument(body) {
+    const instrument = String(body.instrument || "piano").toLowerCase();
+    if (!INSTRUMENTS.includes(instrument)) {
+        throw new TranscribeError(`Unknown instrument: ${instrument}`, 400);
+    }
+    return instrument;
+}
+
+function requireApiKey() {
+    if (!process.env.ANTHROPIC_API_KEY) {
+        throw new TranscribeError(
+            "ANTHROPIC_API_KEY is not set on the server. Copy .env.example to .env and add your key.",
+            500,
+        );
+    }
+}
+
+/** A photo or PDF in, MusicXML plus any clarifying questions out. */
+app.post("/api/transcribe", upload.single("file"), async (req, res, next) => {
+    try {
+        requireApiKey();
+        if (!req.file) throw new TranscribeError("No file uploaded.", 400);
+
+        const result = await transcribe({ file: req.file, instrument: readInstrument(req.body) });
+        logUsage("transcribe", req.file, result);
+        res.json({ title: result.title, musicxml: result.musicxml, questions: result.questions });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/** The same file, the MusicXML so far and my answers in, a corrected score out. */
+app.post("/api/refine", upload.single("file"), async (req, res, next) => {
+    try {
+        requireApiKey();
+        if (!req.file) throw new TranscribeError("No file uploaded.", 400);
+        if (!req.body.musicxml) throw new TranscribeError("No musicxml to correct.", 400);
+
+        let answers;
+        try {
+            answers = JSON.parse(req.body.answers || "[]");
+        } catch {
+            throw new TranscribeError("answers was not valid JSON.", 400);
+        }
+        if (!Array.isArray(answers) || answers.length === 0) {
+            throw new TranscribeError("No answers to apply.", 400);
+        }
+
+        const result = await refine({
+            file: req.file,
+            instrument: readInstrument(req.body),
+            musicxml: req.body.musicxml,
+            answers,
+        });
+        logUsage("refine", req.file, result);
+        res.json({ title: result.title, musicxml: result.musicxml, questions: result.questions });
+    } catch (err) {
+        next(err);
+    }
+});
+
+function logUsage(route, file, result) {
+    const { input_tokens: input, output_tokens: output } = result.usage ?? {};
+    console.log(
+        `${route}: ${file.originalname} (${file.mimetype}) -> "${result.title}", ` +
+            `${result.questions.length} question(s), ${input} in / ${output} out`,
+    );
+}
+
+// Everything that throws ends up here, so the browser always gets JSON.
+app.use((err, _req, res, _next) => {
+    const status = err.status ?? (err.code === "LIMIT_FILE_SIZE" ? 413 : 500);
+    const message =
+        err.code === "LIMIT_FILE_SIZE" ? "That file is larger than 25 MB." : err.message;
+
+    if (status >= 500) console.error(err);
+    res.status(status).json({ error: message });
+});
 
 app.listen(PORT, () => {
     console.log(`Sheet music app running at http://localhost:${PORT}`);
+    if (!process.env.ANTHROPIC_API_KEY) {
+        console.log("No ANTHROPIC_API_KEY set - MusicXML and MIDI still work, photos and PDFs will not.");
+    }
 });
