@@ -1006,3 +1006,14 @@ body.dropping #setup {
     height: 20px;
     flex: 0 0 auto;
 }
+
+/* A standing note about what this copy of the app cannot do. */
+.note {
+    margin: 0;
+    padding: var(--s3);
+    font-size: var(--text-sm);
+    color: var(--warn-ink);
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-line);
+    border-radius: var(--radius-sm);
+}
