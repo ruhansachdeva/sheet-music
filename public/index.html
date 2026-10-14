@@ -8,14 +8,34 @@
         rel="icon"
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%232563eb' d='M6 2h7v2L8 5v7a3 3 0 1 1-2-2.83V2z'/%3E%3C/svg%3E"
     />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+    />
     <link rel="stylesheet" href="style.css" />
     <!-- OpenSheetMusicDisplay ships a UMD bundle, so it loads as a plain script
          and the modules below use the global it defines. -->
     <script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@2.2.1/build/opensheetmusicdisplay.min.js"></script>
 </head>
 <body>
-    <header>
-        <h1>Sheet Music Player</h1>
+    <header class="masthead">
+        <div class="brand">
+            <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                    d="M9 18V5.5l10-2V16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                />
+                <circle cx="6.5" cy="18" r="2.6" fill="currentColor" />
+                <circle cx="16.5" cy="16" r="2.6" fill="currentColor" />
+            </svg>
+            <h1>Sheet&nbsp;Music</h1>
+        </div>
         <p class="tagline">Photograph it, upload it, or write it. Then press play.</p>
     </header>
 
