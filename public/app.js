@@ -23,6 +23,8 @@ const ui = {
     zoom: document.getElementById("zoom"),
     zoomValue: document.getElementById("zoom-value"),
     piece: document.getElementById("piece"),
+    pieceName: document.getElementById("piece-name"),
+    download: document.getElementById("download"),
     score: document.getElementById("score"),
     roll: document.getElementById("roll"),
     questions: document.getElementById("questions"),
@@ -208,7 +210,8 @@ async function transcribe(file) {
     const result = await post("/api/transcribe", body);
     await showScore(result.musicxml, result.title);
     sourceFile = file;
-    ui.piece.textContent = result.title ? `${result.title} — read by Claude` : "Read by Claude";
+    ui.pieceName.textContent = result.title ? `${result.title} — read by Claude` : "Read by Claude";
+    offerDownload(result.title);
     questionPanel.show(result.questions);
 }
 
@@ -227,7 +230,8 @@ async function sendAnswers(answers) {
 
         const result = await post("/api/refine", body);
         await showScore(result.musicxml, result.title);
-        ui.piece.textContent = `${result.title} — corrected`;
+        ui.pieceName.textContent = `${result.title} — corrected`;
+        offerDownload(result.title);
         questionPanel.show(result.questions);
     } catch (error) {
         setStatus(`Could not apply the answers: ${error.message}`, "error");
@@ -250,7 +254,8 @@ function ready(label, loadedTimeline, note = "") {
 
     ui.controls.hidden = false;
     ui.piece.hidden = false;
-    ui.piece.textContent = label;
+    ui.pieceName.textContent = label;
+    offerDownload(label);
 
     const tempoNote = loadedTimeline.scoreBpm
         ? `score tempo ${loadedTimeline.scoreBpm} BPM`
@@ -281,6 +286,26 @@ function handlePosition(time, step) {
     if (view === score) score.showStep(step);
     else if (view === pianoRoll) pianoRoll.showTime(time);
     showPosition(time, step);
+}
+
+/**
+ * Offers the MusicXML on screen as a download. Worth having for a score Claude
+ * read off a photo: that transcription is otherwise lost on reload.
+ */
+function offerDownload(label) {
+    if (ui.download.href) URL.revokeObjectURL(ui.download.href);
+
+    if (!currentMusicXml || view !== score) {
+        ui.download.hidden = true;
+        ui.download.removeAttribute("href");
+        return;
+    }
+
+    const blob = new Blob([currentMusicXml], { type: "application/vnd.recordare.musicxml+xml" });
+    const name = (label || "score").replace(/\.(musicxml|xml|mxl|png|jpe?g|pdf)$/i, "");
+    ui.download.href = URL.createObjectURL(blob);
+    ui.download.download = `${name.replace(/[^\w -]+/g, "").trim() || "score"}.musicxml`;
+    ui.download.hidden = false;
 }
 
 /** The bar number while a score plays, or the elapsed time for a piano roll. */
