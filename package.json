@@ -18,5 +18,8 @@
     "@anthropic-ai/sdk": "^0.133.0",
     "express": "^5.3.0",
     "multer": "^2.4.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
