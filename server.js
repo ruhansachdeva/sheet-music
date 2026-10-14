@@ -50,10 +50,11 @@ function requireApiKey() {
 /** A photo or PDF in, MusicXML plus any clarifying questions out. */
 app.post("/api/transcribe", upload.single("file"), async (req, res, next) => {
     try {
-        requireApiKey();
         if (!req.file) throw new TranscribeError("No file uploaded.", 400);
+        const instrument = readInstrument(req.body);
+        requireApiKey();
 
-        const result = await transcribe({ file: req.file, instrument: readInstrument(req.body) });
+        const result = await transcribe({ file: req.file, instrument });
         logUsage("transcribe", req.file, result);
         res.json({ title: result.title, musicxml: result.musicxml, questions: result.questions });
     } catch (err) {
@@ -64,9 +65,9 @@ app.post("/api/transcribe", upload.single("file"), async (req, res, next) => {
 /** The same file, the MusicXML so far and my answers in, a corrected score out. */
 app.post("/api/refine", upload.single("file"), async (req, res, next) => {
     try {
-        requireApiKey();
         if (!req.file) throw new TranscribeError("No file uploaded.", 400);
         if (!req.body.musicxml) throw new TranscribeError("No musicxml to correct.", 400);
+        const instrument = readInstrument(req.body);
 
         let answers;
         try {
@@ -77,10 +78,11 @@ app.post("/api/refine", upload.single("file"), async (req, res, next) => {
         if (!Array.isArray(answers) || answers.length === 0) {
             throw new TranscribeError("No answers to apply.", 400);
         }
+        requireApiKey();
 
         const result = await refine({
             file: req.file,
-            instrument: readInstrument(req.body),
+            instrument,
             musicxml: req.body.musicxml,
             answers,
         });
@@ -105,7 +107,11 @@ app.use((err, _req, res, _next) => {
     const message =
         err.code === "LIMIT_FILE_SIZE" ? "That file is larger than 25 MB." : err.message;
 
-    if (status >= 500) console.error(err);
+    // A missing key or a declined file is expected and explains itself; only an
+    // unexpected failure is worth a stack trace.
+    if (err instanceof TranscribeError) console.error(`${status}: ${message}`);
+    else console.error(err);
+
     res.status(status).json({ error: message });
 });
 
