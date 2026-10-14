@@ -226,16 +226,16 @@ async function main() {
             return summary;
         `);
 
-        check("Claude's MusicXML renders", !loaded.error, loaded.error ?? "");
+        check("the MusicXML renders", !loaded.error, loaded.error ?? "");
         check("and has notes to play", loaded.notes > 0, `${loaded.notes} notes`);
         check("and a sensible length", loaded.duration > 0, `${loaded.duration?.toFixed(2)}s`);
         console.log(
             `  ${loaded.measures} measures, ${loaded.steps} cursor steps, tempo ${loaded.bpm} BPM`,
         );
 
-        // Hold Claude's output to the same rule as the samples: every measure
+        // Hold the model's output to the same rule as the samples: every measure
         // must add up to its time signature.
-        const xmlPath = join(tmpdir(), `${SAMPLE}-claude.musicxml`);
+        const xmlPath = join(tmpdir(), `${SAMPLE}-transcribed.musicxml`);
         writeFileSync(xmlPath, result.musicxml);
         const verdict = spawn(process.execPath, ["tools/check-musicxml.mjs", xmlPath], {
             cwd: ROOT,

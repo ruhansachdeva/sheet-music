@@ -39,9 +39,18 @@ Two providers are built in, and the app uses whichever key you set:
 | **Gemini** | `GEMINI_API_KEY` from [AI Studio](https://aistudio.google.com/apikey) | Free tier | Reads images and PDFs natively. A few requests a minute, resets daily. |
 | **Claude** | `ANTHROPIC_API_KEY` from the [Console](https://console.anthropic.com/settings/keys) | Paid credits | Better at dense or handwritten scores, roughly $0.20-0.50 a page. |
 
-Set both and Gemini wins; `PROVIDER=claude` in `.env` forces the other. If a
-model name ever goes stale, `GEMINI_MODEL` overrides it and the error message
-lists the models your key can actually reach.
+Set both and Gemini wins; `PROVIDER=claude` in `.env` forces the other.
+
+Gemini's free tier shares capacity, so a model is sometimes too busy to answer.
+The provider handles that itself: it retries with backoff, then falls through
+from `gemini-flash-latest` to `gemini-flash-lite-latest`. Three optional
+overrides, none of them usually needed:
+
+| Variable | Default | Why you might change it |
+| --- | --- | --- |
+| `GEMINI_MODEL` | the two above, in order | Pin one model. The error message lists what your key can reach. |
+| `GEMINI_THINKING` | `medium` | Thinking tokens come out of the output budget - at `high` the model can spend the lot thinking and return nothing. |
+| `GEMINI_MAX_OUTPUT_TOKENS` | `32768` | Raise it for very dense pages. |
 
 ## Testing each feature
 
