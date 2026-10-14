@@ -363,6 +363,56 @@ async function run() {
             check("the audio clock advanced about a second", played.position > 0.8, true);
             check("the cursor moved with it", played.step > 0, true);
             check("stop resets the transport", played.state, "stopped");
+
+            console.log("\ncount in");
+            const counted = await page.evaluate(`
+                const { player } = window.sheetMusic;
+                player.setOption("countIn", true);
+                await player.play();
+                const atStart = player.position();
+                await new Promise((r) => setTimeout(r, 400));
+                const later = player.position();
+                player.stop();
+                player.setOption("countIn", false);
+                return { atStart, later };
+            `);
+            // Four clicks at 100 BPM is 2.4s of count-in before the first note.
+            check("playback starts before bar 1", counted.atStart < -2.2, true);
+            check("and counts towards it", counted.later > counted.atStart, true);
+
+            console.log("\npause, resume and tempo");
+            const transport = await page.evaluate(`
+                const { player } = window.sheetMusic;
+                await player.play();
+                await new Promise((r) => setTimeout(r, 600));
+                player.pause();
+                const paused = player.position();
+                await new Promise((r) => setTimeout(r, 300));
+                const stillPaused = player.position();
+
+                // Resuming schedules the music to reach the paused position
+                // after the lead-in, so give that a moment to elapse.
+                await player.play();
+                await new Promise((r) => setTimeout(r, 300));
+                const resumed = player.position();
+
+                player.setTempo(200);
+                const beforeTempoChange = player.position();
+                await new Promise((r) => setTimeout(r, 200));
+                const afterTempoChange = player.position();
+                const state = player.state;
+                player.stop();
+                player.setTempo(100);
+                return { paused, stillPaused, resumed, beforeTempoChange, afterTempoChange, state };
+            `);
+            check("pause holds the position", transport.stillPaused, transport.paused, 1e-9);
+            check("resume carries on from there", transport.resumed > transport.paused, true);
+            check(
+                "a tempo change keeps the position",
+                transport.afterTempoChange > transport.beforeTempoChange - 0.15,
+                true,
+            );
+            check("a tempo change does not stop playback", transport.state, "playing");
         }
 
         const problems = page.problems();
