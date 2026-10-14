@@ -82,7 +82,10 @@ ui.instrument.addEventListener("change", () => {
 
 ui.file.addEventListener("change", () => {
     const file = ui.file.files?.[0];
-    if (file) loadFile(file);
+    if (!file) return;
+    loadFile(file);
+    // Clear it, so picking the same file again still fires a change event.
+    ui.file.value = "";
 });
 
 for (const button of ui.samples) {
@@ -135,7 +138,7 @@ ui.metronome.addEventListener("change", () =>
 );
 
 document.addEventListener("keydown", (event) => {
-    if (event.target.matches("input, select, textarea")) return;
+    if (event.target instanceof Element && event.target.matches("input, select, textarea")) return;
     if (event.code === "Space" && !ui.controls.hidden) {
         event.preventDefault();
         Promise.resolve(player.toggle()).catch(reportError);
