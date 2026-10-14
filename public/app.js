@@ -359,7 +359,10 @@ function showPosition(time, step) {
     if (!timeline) return;
 
     if (time < 0) {
-        ui.position.textContent = "counting in";
+        // Before the first beat: counting in while playing, otherwise just idle
+        // at the start of the piece.
+        ui.position.textContent =
+            player.state === "playing" ? "counting in" : timeline.isPianoRoll ? "0.0s" : "bar 1";
         return;
     }
     const bar = timeline.steps[step]?.measure;
