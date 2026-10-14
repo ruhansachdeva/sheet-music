@@ -207,6 +207,7 @@ export class Score {
         if (index === this.stepIndex) return;
 
         const cursor = this.osmd.cursor;
+        if (!cursor) return; // nothing rendered yet, so there is no cursor
         if (index < 0) {
             cursor.reset();
             cursor.hide();
@@ -246,6 +247,7 @@ export class Score {
     reset() {
         this.clearLit();
         this.stepIndex = -1;
+        if (!this.osmd.cursor) return;
         this.osmd.cursor.reset();
         this.osmd.cursor.hide();
     }
