@@ -34,9 +34,13 @@ const pianoRoll = new PianoRoll(ui.roll);
 const player = new Player({
     onPosition: handlePosition,
     onState: handleState,
-    onInstrumentLoading: (loading) => {
-        if (loading) setStatus("Loading instrument samples…", "busy");
-        else if (statusKind === "busy") clearStatus();
+    onInstrumentLoading: (loading, detail) => {
+        if (loading) {
+            const percent = Math.round((detail?.progress ?? 0) * 100);
+            setStatus(`Loading ${detail?.instrument ?? "instrument"} samples… ${percent}%`, "busy");
+        } else if (statusKind === "busy") {
+            clearStatus();
+        }
     },
 });
 const questionPanel = new QuestionPanel(ui.questions, { onSubmit: sendAnswers });
@@ -64,7 +68,7 @@ ui.instrument.value = DEFAULT_INSTRUMENT;
 player.setInstrument(DEFAULT_INSTRUMENT);
 
 ui.instrument.addEventListener("change", () => {
-    player.setInstrument(ui.instrument.value);
+    player.setInstrument(ui.instrument.value).catch(reportError);
 });
 
 ui.file.addEventListener("change", () => {
@@ -76,7 +80,7 @@ for (const button of ui.samples) {
     button.addEventListener("click", () => loadSample(button.dataset.sample));
 }
 
-ui.play.addEventListener("click", () => player.toggle());
+ui.play.addEventListener("click", () => Promise.resolve(player.toggle()).catch(reportError));
 ui.stop.addEventListener("click", () => player.stop());
 
 ui.tempo.addEventListener("input", () => {
@@ -106,9 +110,14 @@ document.addEventListener("keydown", (event) => {
     if (event.target.matches("input, select, textarea")) return;
     if (event.code === "Space" && !ui.controls.hidden) {
         event.preventDefault();
-        player.toggle();
+        Promise.resolve(player.toggle()).catch(reportError);
     }
 });
+
+function reportError(error) {
+    console.error(error);
+    setStatus(error.message, "error");
+}
 
 // --- loading ----------------------------------------------------------------
 
@@ -297,15 +306,20 @@ function handleState(state) {
 
 function setStatus(message, kind) {
     statusKind = kind;
+    if (kind === "info") lastInfo = message;
     ui.status.textContent = message;
     ui.status.hidden = false;
     ui.status.className = `status ${kind}`;
 }
 
+/** Busy messages are temporary: when one clears, show what is loaded again. */
 function clearStatus() {
     statusKind = null;
-    ui.status.hidden = true;
+    if (lastInfo) setStatus(lastInfo, "info");
+    else ui.status.hidden = true;
 }
+
+let lastInfo = "";
 
 // A handle for poking at the running app from the browser console, and for the
 // checks in tools/browser-test.mjs.
