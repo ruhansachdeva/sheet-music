@@ -6,6 +6,7 @@ import { Score } from "./js/score.js";
 import { PianoRoll } from "./js/midi.js";
 import { Player } from "./js/player.js";
 import { QuestionPanel } from "./js/questions.js";
+import { Editor } from "./js/editor/ui.js";
 
 const ui = {
     file: document.getElementById("file"),
@@ -36,6 +37,8 @@ const ui = {
     questions: document.getElementById("questions"),
     samples: document.querySelectorAll("[data-sample]"),
     setupWrap: document.getElementById("setup-wrap"),
+    writeMusic: document.getElementById("write-music"),
+    editor: document.getElementById("editor"),
     setupTitle: document.getElementById("setup-title"),
 };
 
@@ -58,6 +61,24 @@ const player = new Player({
     },
 });
 const questionPanel = new QuestionPanel(ui.questions, { onSubmit: sendAnswers });
+
+// Writing a score by hand. Every change re-engraves it, so you see and hear
+// what you are writing as you write it.
+const editor = new Editor(ui.editor, {
+    onChange: (written) => showWrittenScore(written),
+    onClose: () => setStatus("Saved. Press play to hear it.", "info"),
+});
+
+async function showWrittenScore() {
+    player.stop();
+    sourceFile = null;
+    questionPanel.hide();
+    try {
+        await showScore(editor.toMusicXml(), editor.score.title);
+    } catch (error) {
+        reportError(error);
+    }
+}
 
 /** What is on screen: a rendered score, or a piano roll for a MIDI file. */
 let view = null;
@@ -98,6 +119,7 @@ ui.instrument.addEventListener("change", () => {
 // The real file inputs are hidden: the buttons stand in for them, so they can
 // be styled and sized for a thumb.
 ui.chooseFile.addEventListener("click", () => ui.file.click());
+ui.writeMusic.addEventListener("click", () => editor.open());
 ui.takePhoto.addEventListener("click", () => ui.camera.click());
 
 ui.camera.addEventListener("change", () => {

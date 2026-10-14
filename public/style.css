@@ -799,3 +799,172 @@ body.dropping #setup {
 .setup-wrap.first-run #setup {
     border-radius: var(--radius);
 }
+
+/* --- writing a score by hand --------------------------------------------- */
+
+.editor {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lift);
+    padding: var(--s4);
+    display: grid;
+    gap: var(--s4);
+}
+
+.editor-head {
+    display: flex;
+    gap: var(--s2);
+}
+
+.editor-title {
+    flex: 1;
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 600;
+}
+
+.editor-settings {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--s3);
+}
+
+.editor-field {
+    display: grid;
+    gap: var(--s1);
+}
+
+.editor-field .label {
+    margin-bottom: 0;
+}
+
+.editor-tempo {
+    font: inherit;
+    font-size: max(var(--text-base), 16px);
+    width: 100%;
+    min-height: var(--tap);
+    padding: 0 var(--s3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink);
+}
+
+.editor-palette {
+    display: grid;
+    gap: var(--s3);
+}
+
+.lengths {
+    display: flex;
+    gap: var(--s2);
+}
+
+.length {
+    flex: 1;
+    padding: 0;
+}
+
+.glyph {
+    width: 26px;
+    height: 26px;
+}
+
+.length.chosen {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+}
+
+.length.dot .glyph {
+    width: 18px;
+    height: 18px;
+}
+
+.editor-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+}
+
+.editor-actions button {
+    flex: 0 1 auto;
+    font-size: var(--text-sm);
+    padding: 0 var(--s3);
+}
+
+.editor-count {
+    margin-left: auto;
+    font-size: var(--text-sm);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* A keyboard you can hit with a thumb, rather than aiming at a staff line. */
+.keyboard {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 2px;
+    height: 128px;
+}
+
+.key {
+    min-height: 0;
+    padding: 0 0 var(--s2);
+    align-items: flex-end;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    font-size: var(--text-xs);
+    font-weight: 600;
+}
+
+.key.white {
+    background: #fffdfa;
+    color: var(--ink-soft);
+}
+
+.key.black {
+    background: var(--ink);
+    color: #fffdfa;
+    border-color: var(--ink);
+    height: 62%;
+    align-self: start;
+}
+
+.key:active:not(:disabled) {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+    transform: none;
+}
+
+.octave-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s3);
+    margin-top: var(--s2);
+}
+
+.octave {
+    width: var(--tap);
+    padding: 0;
+    font-size: var(--text-lg);
+}
+
+.octave-label {
+    font-size: var(--text-sm);
+    color: var(--muted);
+    min-width: 88px;
+    text-align: center;
+}
+
+@media (min-width: 700px) {
+    .keyboard {
+        height: 150px;
+    }
+
+    .editor-settings {
+        grid-template-columns: repeat(3, minmax(0, 200px));
+    }
+}
