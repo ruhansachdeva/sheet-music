@@ -11,10 +11,12 @@ import { Soundfont, DrumMachine } from "https://cdn.jsdelivr.net/npm/smplr@1.1.0
 import { INSTRUMENTS, concertPitch } from "./instruments.js";
 import { DRUM_MACHINE, resolveDrumName } from "./drums.js";
 
-/** How far ahead to schedule. Below smplr's own 200 ms lookahead, so that
- *  handing it an event starts a real voice at an exact time - which also means
- *  stop() can cancel it. */
-const LOOKAHEAD = 0.15;
+/** How far ahead to schedule. Short while the tab is in front, so stopping is
+ *  responsive. Browsers throttle timers in a background tab to about once a
+ *  second, so a hidden tab schedules much further ahead to stay fed. Either way
+ *  every scheduled note keeps a cancel function, so stopping still works. */
+const LOOKAHEAD_VISIBLE = 0.15;
+const LOOKAHEAD_HIDDEN = 2;
 
 /** How often the scheduler wakes up. Far shorter than LOOKAHEAD, so a late
  *  wake-up still leaves time to schedule. */
@@ -51,8 +53,18 @@ export class Player {
         this.scheduledUntil = 0;
         this.pausedAt = 0;
         this.clicks = [];
+        this.sounding = [];
+        this.lookahead = LOOKAHEAD_VISIBLE;
         this.timer = null;
         this.frame = null;
+
+        document.addEventListener("visibilitychange", () => this.adjustLookahead());
+    }
+
+    /** A hidden tab gets its timers throttled, so it needs a bigger window. */
+    adjustLookahead() {
+        this.lookahead = document.hidden ? LOOKAHEAD_HIDDEN : LOOKAHEAD_VISIBLE;
+        if (this.state === "playing") this.tick(); // fill the wider window now
     }
 
     // --- audio setup ---------------------------------------------------------
@@ -230,16 +242,20 @@ export class Player {
     tick() {
         if (this.state !== "playing") return;
 
-        const horizon = this.position() + LOOKAHEAD / this.scale;
+        const here = this.position();
+        const horizon = here + this.lookahead / this.scale;
         while (this.eventIndex < this.events.length && this.events[this.eventIndex].time <= horizon) {
             const event = this.events[this.eventIndex++];
             const when = this.musicStart + event.time * this.scale;
             if (event.click) this.playClick(when, event.click.accent);
             else this.playNote(event.note, when);
         }
-        this.scheduledUntil = horizon;
+        this.scheduledUntil = Math.max(this.scheduledUntil, horizon);
 
-        if (this.position() >= this.timeline.duration + TAIL) this.stop();
+        // Forget the cancel functions of notes that have finished sounding.
+        this.sounding = this.sounding.filter((voice) => voice.until > here - 0.5);
+
+        if (here >= this.timeline.duration + TAIL) this.stop();
     }
 
     playNote(note, when) {
@@ -249,21 +265,32 @@ export class Player {
         if (note.drumKey !== null || definition.drums) {
             if (!this.drumMachine) return;
             const key = note.drumKey ?? note.midi;
-            this.drumMachine.start({
+            // No duration: a drum sample rings for its own length.
+            const stop = this.drumMachine.start({
                 note: resolveDrumName(key, this.drumNames),
                 time: when,
                 velocity: note.velocity ?? 100,
             });
+            this.remember(stop, note);
             return;
         }
 
         if (!this.melodic) return;
-        this.melodic.start({
+        const stop = this.melodic.start({
             note: concertPitch(note.midi, this.instrumentKey, this.transposeEnabled),
             time: when,
             duration: note.duration * this.scale,
             velocity: note.velocity ?? 100,
         });
+        this.remember(stop, note);
+    }
+
+    /** Keeps a note's cancel function, so pause and stop can silence it even
+     *  when it was scheduled well ahead of the clock. */
+    remember(stop, note) {
+        if (typeof stop === "function") {
+            this.sounding.push({ stop, until: note.time + note.duration });
+        }
     }
 
     /** A short sine blip, higher and louder on beat 1. */
@@ -321,6 +348,17 @@ export class Player {
     // --- teardown -----------------------------------------------------------
 
     silence() {
+        // Cancel each scheduled note individually: this also drops notes that
+        // are queued but have not started, which stop() alone would not.
+        for (const voice of this.sounding) {
+            try {
+                voice.stop();
+            } catch {
+                // The instrument was replaced or disposed; nothing to cancel.
+            }
+        }
+        this.sounding = [];
+
         this.melodic?.stop();
         this.drumMachine?.stop();
         for (const oscillator of this.clicks) {
