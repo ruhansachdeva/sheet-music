@@ -1,303 +1,369 @@
+/* Mobile first. Everything here is sized for a phone held in one hand; wider
+   layouts are additions in the media queries at the bottom. */
+
 :root {
-    --ink: #111827;
-    --muted: #6b7280;
-    --line: #e5e7eb;
+    /* Colour: one accent, one highlight, greys for everything else. */
+    --ink: #0f172a;
+    --ink-soft: #475569;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --line-strong: #cbd5e1;
     --surface: #ffffff;
-    --page: #f7f7f8;
+    --surface-sunk: #f1f5f9;
+    --page: #f8fafc;
     --accent: #2563eb;
+    --accent-ink: #ffffff;
     --accent-soft: #eff6ff;
-    --lit: #c2410c;
+    --lit: #ea580c;
     --warn-bg: #fffbeb;
-    --warn-line: #fcd34d;
+    --warn-line: #fde68a;
+    --warn-ink: #92400e;
     --error: #b91c1c;
-    --radius: 10px;
+    --error-bg: #fef2f2;
+
+    /* Type scale. */
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.375rem;
+
+    /* Spacing rhythm, all multiples of four. */
+    --s1: 4px;
+    --s2: 8px;
+    --s3: 12px;
+    --s4: 16px;
+    --s5: 24px;
+    --s6: 32px;
+
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 2px rgb(15 23 42 / 6%), 0 1px 3px rgb(15 23 42 / 4%);
+    --shadow-up: 0 -2px 16px rgb(15 23 42 / 10%);
+
+    /* Anything you tap is at least this tall. */
+    --tap: 44px;
 }
 
 * {
     box-sizing: border-box;
 }
 
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
 body {
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: var(--text-base);
+    line-height: 1.5;
     color: var(--ink);
     background: var(--page);
-    margin: 0 auto;
-    max-width: 1100px;
-    padding: 24px 16px 64px;
-    line-height: 1.5;
+    margin: 0;
+    padding: var(--s4);
+    padding-left: max(var(--s4), env(safe-area-inset-left));
+    padding-right: max(var(--s4), env(safe-area-inset-right));
 }
 
-header h1 {
-    font-size: 1.5rem;
-    margin: 0 0 4px;
+h1,
+h2,
+h3 {
+    line-height: 1.25;
+    margin: 0;
 }
 
-.tagline {
-    color: var(--muted);
-    margin: 0 0 20px;
-}
+/* --- primitives ---------------------------------------------------------- */
 
-section {
-    margin-bottom: 16px;
-}
-
-/* --- upload row --------------------------------------------------------- */
-
-#setup {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 16px;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 16px;
-}
-
-.field label {
+.label {
     display: block;
+    font-size: var(--text-xs);
     font-weight: 600;
-    font-size: 0.8rem;
-    text-transform: uppercase;
     letter-spacing: 0.04em;
+    text-transform: uppercase;
     color: var(--muted);
-    margin-bottom: 6px;
+    margin-bottom: var(--s2);
 }
 
 .hint {
     color: var(--muted);
-    font-size: 0.8rem;
-    margin: 6px 0 0;
+    font-size: var(--text-sm);
+    margin: var(--s2) 0 0;
 }
 
-input[type="file"],
-select {
-    width: 100%;
+button,
+.button {
     font: inherit;
-    padding: 7px 8px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--surface);
-}
-
-.samples {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-}
-
-/* --- buttons ------------------------------------------------------------ */
-
-button {
-    font: inherit;
-    padding: 7px 14px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
+    font-weight: 500;
+    min-height: var(--tap);
+    padding: 0 var(--s4);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--ink);
     cursor: pointer;
-}
-
-button:hover:not(:disabled) {
-    border-color: #d1d5db;
-    background: #fafafa;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    touch-action: manipulation; /* no double-tap zoom on controls */
 }
 
 button:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
     cursor: default;
 }
 
 button.primary {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--accent-ink);
     font-weight: 600;
-}
-
-button.primary:hover:not(:disabled) {
-    background: #1d4ed8;
-    border-color: #1d4ed8;
 }
 
 button.link {
     border: none;
     background: none;
     color: var(--accent);
+    min-height: 0;
     padding: 0;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
 }
 
-/* --- status ------------------------------------------------------------- */
+select,
+input[type="text"] {
+    font: inherit;
+    width: 100%;
+    min-height: var(--tap);
+    padding: 0 var(--s3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink);
+    /* 16px minimum, or iOS zooms the page when the field takes focus. */
+    font-size: max(var(--text-base), 16px);
+}
 
-.status {
-    margin: 0 0 16px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    font-size: 0.9rem;
+input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+    height: var(--tap);
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+@media (hover: hover) {
+    button:hover:not(:disabled) {
+        border-color: var(--muted);
+    }
+
+    button.primary:hover:not(:disabled) {
+        background: #1d4ed8;
+        border-color: #1d4ed8;
+    }
+}
+
+/* --- page furniture ------------------------------------------------------ */
+
+header {
+    margin-bottom: var(--s4);
+}
+
+header h1 {
+    font-size: var(--text-xl);
+    letter-spacing: -0.01em;
+}
+
+.tagline {
+    color: var(--muted);
+    font-size: var(--text-sm);
+    margin: var(--s1) 0 0;
+}
+
+section {
+    margin-bottom: var(--s4);
+}
+
+/* --- setup --------------------------------------------------------------- */
+
+#setup {
     background: var(--surface);
     border: 1px solid var(--line);
-    color: var(--muted);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: var(--s4);
+    display: grid;
+    gap: var(--s4);
+}
+
+.samples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+}
+
+.samples button {
+    flex: 1 1 calc(50% - var(--s2));
+    font-size: var(--text-sm);
+    padding: 0 var(--s2);
+}
+
+/* --- status -------------------------------------------------------------- */
+
+.status {
+    margin: 0 0 var(--s4);
+    padding: var(--s3);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
 }
 
 .status.busy {
     background: var(--accent-soft);
-    border-color: #bfdbfe;
-    color: #1e40af;
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 .status.error {
-    background: #fef2f2;
-    border-color: #fecaca;
+    background: var(--error-bg);
+    border-color: var(--error);
     color: var(--error);
 }
 
-/* --- transport ---------------------------------------------------------- */
+/* --- transport ----------------------------------------------------------- */
 
 #controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 20px;
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    padding: 12px 16px;
-    position: sticky;
-    top: 0;
-    z-index: 5;
+    box-shadow: var(--shadow);
+    padding: var(--s3) var(--s4);
+    display: grid;
+    gap: var(--s3);
 }
 
 .transport {
     display: flex;
-    gap: 8px;
+    align-items: center;
+    gap: var(--s2);
 }
 
 #play {
-    min-width: 84px;
+    flex: 1;
 }
 
 .position {
-    align-self: center;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     color: var(--muted);
     font-variant-numeric: tabular-nums;
-    min-width: 68px;
+    white-space: nowrap;
 }
 
 .tempo,
 .zoom {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
-    gap: 10px;
-    flex: 1 1 280px;
+    gap: var(--s3);
 }
 
-.zoom {
-    flex: 0 1 190px;
+.tempo .label,
+.zoom .label {
+    margin-bottom: 0;
 }
 
-.zoom output {
-    font-size: 0.85rem;
+#tempo-value,
+#zoom-value {
+    font-size: var(--text-sm);
     font-variant-numeric: tabular-nums;
-    min-width: 44px;
-}
-
-.zoom input[type="range"] {
-    flex: 1;
-    accent-color: var(--accent);
-}
-
-.zoom label,
-.tempo label {
-    font-weight: 600;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--muted);
-}
-
-.tempo input[type="range"] {
-    flex: 1;
-    accent-color: var(--accent);
-}
-
-#tempo-value {
-    font-variant-numeric: tabular-nums;
-    min-width: 72px;
-    font-size: 0.9rem;
+    min-width: 68px;
+    text-align: right;
 }
 
 .toggles {
     display: flex;
-    gap: 16px;
+    gap: var(--s4);
 }
 
 .toggles label {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 0.9rem;
+    gap: var(--s2);
+    font-size: var(--text-sm);
+    min-height: var(--tap);
     cursor: pointer;
 }
 
 .toggles input {
+    width: 20px;
+    height: 20px;
     accent-color: var(--accent);
 }
 
-/* --- questions ---------------------------------------------------------- */
+/* --- questions ----------------------------------------------------------- */
 
 .questions {
     background: var(--warn-bg);
     border: 1px solid var(--warn-line);
     border-radius: var(--radius);
-    padding: 16px;
+    padding: var(--s4);
 }
 
 .questions-head h2 {
-    font-size: 1rem;
-    margin: 0 0 4px;
+    font-size: var(--text-base);
+    margin-bottom: var(--s1);
 }
 
 .questions-head p {
-    margin: 0 0 12px;
-    font-size: 0.875rem;
-    color: #92400e;
+    margin: 0 0 var(--s3);
+    font-size: var(--text-sm);
+    color: var(--warn-ink);
 }
 
 .question {
     background: var(--surface);
-    border: 1px solid #fde68a;
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 10px;
+    border: 1px solid var(--warn-line);
+    border-radius: var(--radius-sm);
+    padding: var(--s3);
+    margin-bottom: var(--s3);
 }
 
 .question-text {
-    margin: 0 0 10px;
+    margin: 0 0 var(--s3);
+    font-size: var(--text-sm);
 }
 
 .measure {
     display: inline-block;
-    background: #fef3c7;
-    border-radius: 5px;
-    padding: 1px 6px;
-    margin-right: 6px;
-    font-size: 0.8rem;
+    background: var(--warn-bg);
+    border-radius: var(--radius-sm);
+    padding: 0 var(--s2);
+    margin-right: var(--s2);
+    font-size: var(--text-xs);
     font-weight: 600;
-    color: #92400e;
+    color: var(--warn-ink);
 }
 
 .choices {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 8px;
+    gap: var(--s2);
+    margin-bottom: var(--s2);
+}
+
+.choice {
+    font-size: var(--text-sm);
+    padding: 0 var(--s3);
 }
 
 .choice.chosen {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--accent-ink);
 }
 
 .choice.skip {
@@ -305,24 +371,30 @@ button.link {
 }
 
 .free-text {
-    width: 100%;
-    font: inherit;
-    font-size: 0.9rem;
-    padding: 6px 8px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
+    font-size: max(var(--text-sm), 16px);
 }
 
 .questions-actions {
     display: flex;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: var(--s2);
 }
 
-/* --- score and piano roll ----------------------------------------------- */
+/* --- score and piano roll ------------------------------------------------ */
 
 .piece {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--s3);
     font-weight: 600;
-    margin: 0 0 8px;
+    margin: 0 0 var(--s2);
+}
+
+.download {
+    font-size: var(--text-sm);
+    font-weight: 400;
+    color: var(--accent);
 }
 
 .score,
@@ -330,8 +402,10 @@ button.link {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    padding: 8px;
+    box-shadow: var(--shadow);
+    padding: var(--s2);
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* The note under the cursor. A CSS rule beats VexFlow's fill attributes, so
@@ -343,33 +417,23 @@ button.link {
     stroke: var(--lit);
 }
 
-/* --- piano roll --------------------------------------------------------- */
-
 .roll {
     --roll-scale: 1;
 }
 
 .piano-roll {
     width: 100%;
-    height: calc(340px * var(--roll-scale));
+    height: calc(300px * var(--roll-scale));
     display: block;
 }
 
 .roll-row {
-    fill: #f3f4f6;
+    fill: var(--surface-sunk);
 }
 
 .roll-bar {
     stroke: var(--line);
     stroke-width: 1;
-}
-
-.roll-note {
-    fill: #93c5fd;
-}
-
-.roll-note.drum {
-    fill: #a7a3f3;
 }
 
 .roll-octave {
@@ -382,6 +446,14 @@ button.link {
     font-size: 7px;
     font-family: system-ui, sans-serif;
     text-anchor: end;
+}
+
+.roll-note {
+    fill: #93c5fd;
+}
+
+.roll-note.drum {
+    fill: #a5b4fc;
 }
 
 .roll-note.lit {
@@ -397,57 +469,96 @@ button.link {
     visibility: hidden;
 }
 
+/* While a file is dragged over the page. */
+body.dropping #setup {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+/* --- wider screens ------------------------------------------------------- */
+
+@media (min-width: 700px) {
+    body {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: var(--s5) var(--s4) var(--s6);
+    }
+
+    header h1 {
+        font-size: 1.5rem;
+    }
+
+    #setup {
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: var(--s5);
+    }
+
+    #controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--s5);
+        position: sticky;
+        top: 0;
+        z-index: 5;
+    }
+
+    #play {
+        flex: 0 0 auto;
+        min-width: 96px;
+    }
+
+    .tempo {
+        flex: 1 1 280px;
+    }
+
+    .zoom {
+        flex: 0 1 200px;
+    }
+
+    .samples button {
+        flex: 0 1 auto;
+    }
+
+    .piano-roll {
+        height: calc(340px * var(--roll-scale));
+    }
+}
+
+/* --- dark mode ----------------------------------------------------------- */
+
 @media (prefers-color-scheme: dark) {
     :root {
-        --ink: #f3f4f6;
-        --muted: #9ca3af;
-        --line: #374151;
-        --surface: #1f2937;
-        --page: #111827;
-        --accent: #60a5fa;
+        --ink: #f1f5f9;
+        --ink-soft: #cbd5e1;
+        --muted: #94a3b8;
+        --line: #334155;
+        --line-strong: #475569;
+        --surface: #1e293b;
+        --surface-sunk: #0f172a;
+        --page: #0b1220;
+        --accent: #3b82f6;
         --accent-soft: #1e3a5f;
         --lit: #fb923c;
-        --warn-bg: #2d2416;
-        --warn-line: #a16207;
+        --warn-bg: #2a2416;
+        --warn-line: #854d0e;
+        --warn-ink: #fcd34d;
+        --error: #fca5a5;
+        --error-bg: #2a1616;
+        --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+        --shadow-up: 0 -2px 16px rgb(0 0 0 / 50%);
     }
 
-    /* The engraving itself stays on white paper, which is what sheet music
-       looks like - only the surrounding page goes dark. */
+    /* Sheet music stays on white paper, which is what it looks like. */
     .score {
         background: #fff;
-    }
-
-    .question {
-        border-color: #a16207;
-    }
-
-    .measure {
-        background: #422006;
-        color: #fcd34d;
-    }
-
-    .questions-head p {
-        color: #fcd34d;
-    }
-
-    .roll-row {
-        fill: #273244;
     }
 
     .roll-note {
         fill: #3b82f6;
     }
-}
 
-.download {
-    margin-left: 10px;
-    font-size: 0.85rem;
-    font-weight: 400;
-    color: var(--accent);
-}
-
-/* While a file is being dragged over the page. */
-body.dropping #setup {
-    border-color: var(--accent);
-    background: var(--accent-soft);
+    .roll-note.drum {
+        fill: #818cf8;
+    }
 }
