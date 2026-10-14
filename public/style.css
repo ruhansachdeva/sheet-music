@@ -236,14 +236,43 @@ section {
 
 /* --- transport ----------------------------------------------------------- */
 
+/* On a phone the transport is docked to the bottom, in thumb reach, and the
+   secondary controls slide up from it. */
 #controls {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
     background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: var(--s3) var(--s4);
+    border-top: 1px solid var(--line);
+    box-shadow: var(--shadow-up);
+    padding: var(--s2) var(--s4);
+    padding-bottom: max(var(--s2), env(safe-area-inset-bottom));
     display: grid;
     gap: var(--s3);
+}
+
+/* Room for the docked bar, so it never covers the end of the score. */
+body.has-transport {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+}
+
+.more {
+    flex: 0 0 auto;
+    width: var(--tap);
+    padding: 0;
+    font-size: var(--text-lg);
+}
+
+.more-controls {
+    display: none;
+    gap: var(--s3);
+    grid-template-columns: 1fr;
+}
+
+.more-controls.open {
+    display: grid;
 }
 
 .transport {
@@ -493,14 +522,33 @@ body.dropping #setup {
         gap: var(--s5);
     }
 
+    /* Wide enough for one row: undock it and show everything at once. */
     #controls {
+        position: sticky;
+        top: 0;
+        bottom: auto;
+        left: auto;
+        right: auto;
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: var(--s5);
-        position: sticky;
-        top: 0;
-        z-index: 5;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: var(--s3) var(--s4);
+    }
+
+    body.has-transport {
+        padding-bottom: var(--s6);
+    }
+
+    .more {
+        display: none;
+    }
+
+    .more-controls {
+        display: contents;
     }
 
     #play {
