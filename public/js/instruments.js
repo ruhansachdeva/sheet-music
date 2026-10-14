@@ -11,6 +11,9 @@ export const INSTRUMENTS = {
     "alto sax": { label: "Alto sax (Eb)", soundfont: "alto_sax", transpose: -9 },
     "tenor sax": { label: "Tenor sax (Bb)", soundfont: "tenor_sax", transpose: -14 },
     guitar: { label: "Guitar", soundfont: "acoustic_guitar_nylon", transpose: -12 },
+    // Bass parts are written an octave above where they sound, as guitar is.
+    bass: { label: "Bass guitar", soundfont: "electric_bass_finger", transpose: -12 },
+    "double bass": { label: "Double bass", soundfont: "contrabass", transpose: -12 },
     drums: { label: "Drums", drums: true, transpose: 0 },
 };
 
