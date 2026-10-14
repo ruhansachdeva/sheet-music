@@ -1000,3 +1000,9 @@ body.dropping #setup {
         grid-template-columns: repeat(3, minmax(0, 200px));
     }
 }
+
+.icon {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+}
