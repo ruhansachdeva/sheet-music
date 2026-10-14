@@ -384,7 +384,7 @@ body.has-transport {
     background: var(--warn-bg);
     border: 1px solid var(--warn-line);
     border-radius: var(--radius);
-    padding: var(--s4);
+    padding: var(--s3);
 }
 
 .questions-head h2 {
@@ -403,7 +403,7 @@ body.has-transport {
     border: 1px solid var(--warn-line);
     border-radius: var(--radius-sm);
     padding: var(--s3);
-    margin-bottom: var(--s3);
+    margin-bottom: var(--s2);
 }
 
 .question-text {
@@ -432,6 +432,20 @@ body.has-transport {
 .choice {
     font-size: var(--text-sm);
     padding: 0 var(--s3);
+    min-height: 38px;
+    flex: 0 1 auto;
+}
+
+/* Skip and "something else" are ways out, not answers, so they read as links. */
+.skip-link {
+    border: none;
+    background: none;
+    min-height: 38px;
+    padding: 0 var(--s2);
+    font-size: var(--text-sm);
+    color: var(--muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
 }
 
 .choice.chosen {

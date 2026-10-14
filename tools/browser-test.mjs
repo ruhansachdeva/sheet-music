@@ -428,6 +428,57 @@ async function run() {
         check("C5 is the snare", kit.staffSnare, 38);
         check("G5 above the staff is the hi-hat", kit.staffHat, 42);
 
+        // --- the clarifying question panel ----------------------------------
+        console.log("\nclarifying questions");
+        const asked = await page.evaluate(`
+            const { QuestionPanel } = await import("./js/questions.js");
+            let submitted = null;
+            const panel = new QuestionPanel(document.getElementById("questions"), {
+                onSubmit: (answers) => { submitted = answers; },
+            });
+            panel.show([
+                { id: "q1", measure: 3, question: "Tie or slur?", options: ["Tie", "Slur"] },
+                { id: "q2", measure: 7, question: "Flat or natural?", options: ["Flat", "Natural"] },
+            ]);
+
+            const panelEl = document.getElementById("questions");
+            const send = panelEl.querySelector(".questions-actions .primary");
+            const sendStartsDisabled = send.disabled;
+
+            // Answer the first question.
+            panelEl.querySelectorAll(".question")[0].querySelector(".choice").click();
+            const afterOne = { chosen: panelEl.querySelectorAll(".choice.chosen").length, enabled: !send.disabled };
+
+            // Type a different answer to the second.
+            const second = panelEl.querySelectorAll(".question")[1];
+            const other = second.querySelector(".other");
+            const hiddenBefore = second.querySelector(".free-text").hidden;
+            other.click();
+            const field = second.querySelector(".free-text");
+            field.value = "A natural";
+            field.dispatchEvent(new Event("input"));
+
+            send.click();
+            return {
+                rendered: panelEl.querySelectorAll(".question").length,
+                sendStartsDisabled,
+                afterOne,
+                freeTextHiddenUntilAsked: hiddenBefore,
+                freeTextShown: !field.hidden,
+                submitted,
+            };
+        `);
+        check("both questions render", asked.rendered, 2);
+        check("send is disabled until something is answered", asked.sendStartsDisabled, true);
+        check("choosing an option marks it", asked.afterOne.chosen, 1);
+        check("and enables send", asked.afterOne.enabled, true);
+        check("the free-text box stays hidden until asked for", asked.freeTextHiddenUntilAsked, true);
+        check("and appears when it is", asked.freeTextShown, true);
+        check("both answers are submitted", asked.submitted?.length, 2);
+        check("including the typed one", asked.submitted?.[1]?.answer, "A natural");
+
+        await page.evaluate(`document.getElementById("questions").hidden = true;`);
+
         // --- a file that is not sheet music ---------------------------------
         console.log("\nbad input");
         // The app is supposed to log this one, so it is not a problem.

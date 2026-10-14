@@ -32,10 +32,10 @@ export class QuestionPanel {
 
         const heading = document.createElement("div");
         heading.className = "questions-head";
+        const count = this.questions.length;
         heading.innerHTML = `
-            <h2>Claude wasn't sure about ${this.questions.length}
-                ${this.questions.length === 1 ? "thing" : "things"}</h2>
-            <p>Answer what you know and skip the rest - it will use its best guess for those.
+            <h2>${count} ${count === 1 ? "question" : "questions"} about the page</h2>
+            <p>Answer what you know and skip the rest - your best guess stands for those.
                The score below already plays.</p>`;
         this.container.appendChild(heading);
 
@@ -48,7 +48,7 @@ export class QuestionPanel {
 
         const apply = document.createElement("button");
         apply.className = "primary";
-        apply.textContent = "Send answers to Claude";
+        apply.textContent = "Send answers";
         apply.disabled = true;
         apply.addEventListener("click", () => this.submit());
 
@@ -75,6 +75,22 @@ export class QuestionPanel {
         const choices = document.createElement("div");
         choices.className = "choices";
 
+        // Declared first: the answer buttons below close over them.
+        const freeText = document.createElement("input");
+        freeText.type = "text";
+        freeText.className = "free-text";
+        freeText.placeholder = "Type your answer";
+        freeText.hidden = true;
+
+        const other = document.createElement("button");
+        other.className = "skip-link other";
+        other.textContent = "Something else…";
+        other.addEventListener("click", () => {
+            freeText.hidden = false;
+            other.hidden = true;
+            freeText.focus();
+        });
+
         for (const option of question.options ?? []) {
             const button = document.createElement("button");
             button.className = "choice";
@@ -89,7 +105,7 @@ export class QuestionPanel {
         }
 
         const skip = document.createElement("button");
-        skip.className = "choice skip";
+        skip.className = "skip-link";
         skip.textContent = "Skip";
         skip.addEventListener("click", () => {
             this.answers.delete(question.id);
@@ -97,13 +113,9 @@ export class QuestionPanel {
             freeText.value = "";
             this.refreshApply();
         });
-        choices.appendChild(skip);
+        choices.append(skip, other);
         card.appendChild(choices);
 
-        const freeText = document.createElement("input");
-        freeText.type = "text";
-        freeText.className = "free-text";
-        freeText.placeholder = "Or type your own answer";
         freeText.addEventListener("input", () => {
             const value = freeText.value.trim();
             if (value) {
@@ -132,7 +144,7 @@ export class QuestionPanel {
     setBusy(busy) {
         if (!this.applyButton) return;
         this.applyButton.disabled = busy || this.answers.size === 0;
-        this.applyButton.textContent = busy ? "Claude is correcting…" : "Send answers to Claude";
+        this.applyButton.textContent = busy ? "Correcting…" : "Send answers";
     }
 }
 
