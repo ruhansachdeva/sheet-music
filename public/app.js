@@ -131,11 +131,20 @@ async function loadFile(file) {
 async function loadSample(name) {
     player.stop();
     setStatus(`Loading ${name}…`, "busy");
+    sourceFile = null;
+    questionPanel.hide();
+
     try {
         const response = await fetch(`/samples/${name}`);
         if (!response.ok) throw new Error(`${response.status}`);
-        await showScore(await response.text(), name);
+
+        if (name.endsWith(".mid") || name.endsWith(".midi")) {
+            await showPianoRoll(await response.arrayBuffer(), name);
+        } else {
+            await showScore(await response.text(), name);
+        }
     } catch (error) {
+        console.error(error);
         setStatus(`Could not load the sample: ${error.message}`, "error");
     }
 }
@@ -268,3 +277,15 @@ function clearStatus() {
     statusKind = null;
     ui.status.hidden = true;
 }
+
+// A handle for poking at the running app from the browser console, and for the
+// checks in tools/browser-test.mjs.
+window.sheetMusic = {
+    player,
+    score,
+    pianoRoll,
+    get timeline() {
+        return timeline;
+    },
+    loadSample,
+};
