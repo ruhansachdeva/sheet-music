@@ -20,15 +20,28 @@ a metronome, and the current note lit up on the score.
 
 ```sh
 npm install
-cp .env.example .env     # add your ANTHROPIC_API_KEY
+cp .env.example .env     # add an API key
 npm start
 ```
 
 Then open <http://localhost:3000>.
 
-The key is only needed for photos and PDFs. Without it the app still loads
-MusicXML and MIDI, and says so on startup. The key stays on the server: the
-browser only ever talks to `/api/transcribe` and `/api/refine`.
+A key is only needed for reading photos and PDFs. Without one the app still
+loads MusicXML and MIDI, and says so on startup. The key stays on the server:
+the browser only ever talks to `/api/transcribe` and `/api/refine`.
+
+### Which key
+
+Two providers are built in, and the app uses whichever key you set:
+
+| Provider | Key | Cost | Notes |
+| --- | --- | --- | --- |
+| **Gemini** | `GEMINI_API_KEY` from [AI Studio](https://aistudio.google.com/apikey) | Free tier | Reads images and PDFs natively. A few requests a minute, resets daily. |
+| **Claude** | `ANTHROPIC_API_KEY` from the [Console](https://console.anthropic.com/settings/keys) | Paid credits | Better at dense or handwritten scores, roughly $0.20-0.50 a page. |
+
+Set both and Gemini wins; `PROVIDER=claude` in `.env` forces the other. If a
+model name ever goes stale, `GEMINI_MODEL` overrides it and the error message
+lists the models your key can actually reach.
 
 ## Testing each feature
 
@@ -104,7 +117,7 @@ time.
 npm run check        # every measure in samples/ adds up to its time signature
 npm test             # loads each sample in headless Chrome, checks the timeline
 npm run test:audio   # also plays, and watches the audio clock and cursor
-npm run test:claude  # end to end through Claude - costs money, needs a key
+npm run test:transcribe  # end to end through the model - needs a key
 ```
 
 `npm test` is the useful one. It drives a real browser over the DevTools
@@ -115,17 +128,20 @@ second pass, that 6/8 produces six clicks a bar, that drum notes map to the righ
 kit pieces, and that the engraving is laid out at a sensible size. It needs a
 Chromium binary — it finds Playwright's cached one, or set `CHROME_PATH`.
 
-`npm run test:claude` has no photograph to work from, so it renders a sample in
+`npm run test:transcribe` has no photograph to work from, so it renders a sample in
 the browser, screenshots the engraving, and posts that image to
 `/api/transcribe` as if you had photographed it. It then checks the MusicXML that
 comes back renders, plays, and has measures that add up. Add `-- --answer` to
-answer every question with its first option and exercise `/api/refine` too.
+answer every question with its first option and exercise `/api/refine` too. On
+Gemini's free tier this costs nothing to run.
 
 ## How it works
 
 ```text
 server.js            Express: POST /api/transcribe, POST /api/refine
-lib/claude.js        the Claude call, the prompt, and the response schema
+lib/transcriber.js   picks a provider, validates what comes back
+lib/prompt.js        the prompt and response schema, shared by both providers
+lib/providers/       one file per provider: gemini.js, claude.js
 public/app.js        picks a loader for the file, wires up the controls
 public/js/score.js   renders MusicXML, reads a timeline out of it
 public/js/midi.js    parses MIDI, draws the piano roll
@@ -151,10 +167,12 @@ main thread is busy. Nothing is played by `setTimeout`. The highlighting runs of
 `requestAnimationFrame` and reads the same audio clock, so what you see and what
 you hear stay together.
 
-**Reading a photo.** `lib/claude.js` sends the image or PDF to
-`claude-opus-5-5` with adaptive thinking, `effort: "high"`, and a strict JSON
-schema for the response, streamed because a full score of MusicXML is long.
-Server-side refusal fallbacks are on. The prompt asks for complete MusicXML 3.1
+**Reading a photo.** The image or PDF goes to whichever provider is configured,
+with a strict JSON schema for the response. Claude gets adaptive thinking and
+`effort: "high"`, streamed because a full score of MusicXML is long, with
+server-side refusal fallbacks on; Gemini gets `thinking_level: "high"` over its
+REST Interactions API, which takes PDFs natively so a scan never has to be
+rendered to images. The prompt asks for complete MusicXML 3.1
 at written pitch, and is strict about the thing that breaks playback most often:
 every measure's durations have to add up to the time signature. Questions are
 asked only when a reading is genuinely ambiguous and the answer changes the notes
@@ -172,6 +190,8 @@ instruments and the drum machine, and
   do not; upload them one page at a time.
 - Instrument samples download on first use, so the first Play after switching
   instrument can wait a moment.
+- Gemini's free tier is rate limited to a few requests a minute with a daily
+  cap, so a long session of reading pages will hit a 429 and have to wait.
 - A tempo change in the middle of a measure moves the notes correctly but leaves
   that measure's remaining metronome clicks at the old tempo.
 - Drum notation without a `<midi-unpitched>` mapping falls back to reading the

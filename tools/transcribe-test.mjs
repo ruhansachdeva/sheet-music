@@ -1,13 +1,14 @@
-// End-to-end test of the Claude path, without needing a photo of real sheet
+// End-to-end test of the transcription path, without needing a photo of real sheet
 // music: it renders one of the samples in a headless browser, screenshots the
 // engraving, and posts that image to /api/transcribe as if you had photographed
 // it. Then it loads the MusicXML that comes back and checks it plays.
 //
-//   npm run test:claude                       # twinkle
-//   npm run test:claude -- timing-test        # another sample
-//   npm run test:claude -- twinkle --answer   # also answer any questions
+//   npm run test:transcribe                       # twinkle
+//   npm run test:transcribe -- timing-test        # another sample
+//   npm run test:transcribe -- twinkle --answer   # also answer any questions
 //
-// This one costs money: it makes one or two real Claude requests.
+// It makes one or two real requests to whichever provider .env is set up for.
+// On Gemini's free tier that costs nothing; on Claude it costs a few cents.
 
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -21,8 +22,8 @@ const args = process.argv.slice(2);
 const SAMPLE = (args.find((a) => !a.startsWith("--")) ?? "twinkle").replace(/\.musicxml$/, "");
 const ANSWER = args.includes("--answer");
 
-if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("ANTHROPIC_API_KEY is not set. Put it in .env (see .env.example).");
+if (!process.env.GEMINI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+    console.error("No API key set. Put GEMINI_API_KEY or ANTHROPIC_API_KEY in .env (see .env.example).");
     process.exit(2);
 }
 
@@ -179,7 +180,7 @@ async function main() {
         console.log(`\nPhotographed ${SAMPLE}.musicxml -> ${imagePath} (${image.length} bytes)`);
 
         // 2. Send it through the real transcription path.
-        console.log("\nPOST /api/transcribe (this is the part that costs money)");
+        console.log("\nPOST /api/transcribe (the one part that calls the model)");
         const form = new FormData();
         form.append("file", new Blob([image], { type: "image/png" }), `${SAMPLE}.png`);
         form.append("instrument", "piano");

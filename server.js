@@ -1,6 +1,12 @@
 import express from "express";
 import multer from "multer";
-import { transcribe, refine, TranscribeError } from "./lib/claude.js";
+import {
+    transcribe,
+    refine,
+    TranscribeError,
+    currentProvider,
+    requireProvider,
+} from "./lib/transcriber.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,21 +44,14 @@ function readInstrument(body) {
     return instrument;
 }
 
-function requireApiKey() {
-    if (!process.env.ANTHROPIC_API_KEY) {
-        throw new TranscribeError(
-            "ANTHROPIC_API_KEY is not set on the server. Copy .env.example to .env and add your key.",
-            500,
-        );
-    }
-}
+
 
 /** A photo or PDF in, MusicXML plus any clarifying questions out. */
 app.post("/api/transcribe", upload.single("file"), async (req, res, next) => {
     try {
         if (!req.file) throw new TranscribeError("No file uploaded.", 400);
         const instrument = readInstrument(req.body);
-        requireApiKey();
+        requireProvider();
 
         const result = await transcribe({ file: req.file, instrument });
         logUsage("transcribe", req.file, result);
@@ -78,7 +77,7 @@ app.post("/api/refine", upload.single("file"), async (req, res, next) => {
         if (!Array.isArray(answers) || answers.length === 0) {
             throw new TranscribeError("No answers to apply.", 400);
         }
-        requireApiKey();
+        requireProvider();
 
         const result = await refine({
             file: req.file,
@@ -94,10 +93,10 @@ app.post("/api/refine", upload.single("file"), async (req, res, next) => {
 });
 
 function logUsage(route, file, result) {
-    const { input_tokens: input, output_tokens: output } = result.usage ?? {};
+    const { input, output } = result.usage ?? {};
     console.log(
         `${route}: ${file.originalname} (${file.mimetype}) -> "${result.title}", ` +
-            `${result.questions.length} question(s), ${input} in / ${output} out`,
+            `${result.questions.length} question(s), ${input} in / ${output} out [${result.model}]`,
     );
 }
 
@@ -117,7 +116,16 @@ app.use((err, _req, res, _next) => {
 
 app.listen(PORT, () => {
     console.log(`Sheet music app running at http://localhost:${PORT}`);
-    if (!process.env.ANTHROPIC_API_KEY) {
-        console.log("No ANTHROPIC_API_KEY set - MusicXML and MIDI still work, photos and PDFs will not.");
-    }
+
+    const provider = (() => {
+        try {
+            return currentProvider();
+        } catch (error) {
+            console.log(error.message);
+            return null;
+        }
+    })();
+
+    if (provider) console.log(`Reading photos and PDFs with ${provider.label}.`);
+    else console.log("No API key set - MusicXML and MIDI still work, photos and PDFs will not.");
 });
