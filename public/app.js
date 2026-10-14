@@ -37,6 +37,10 @@ const player = new Player({
     onPosition: handlePosition,
     onState: handleState,
     onInstrumentLoading: (loading, detail) => {
+        // Samples load in the background, and must never bury an error the
+        // user still needs to read.
+        if (statusKind === "error") return;
+
         if (loading) {
             const percent = Math.round((detail?.progress ?? 0) * 100);
             setStatus(`Loading ${detail?.instrument ?? "instrument"} samples… ${percent}%`, "busy");
