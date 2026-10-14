@@ -5,7 +5,12 @@
 // the score's own tempo. The player scales them by scoreBpm / chosenBpm, so the
 // tempo slider works even when the score changes tempo part-way through.
 
+import { gmKeyFromStaffPosition } from "./drums.js";
+
 const DEFAULT_BPM = 100;
+
+/** OSMD's MidiInstrument value for a part on MIDI channel 10. */
+const PERCUSSION = 128;
 
 /** Shortest a note is allowed to sound, so grace notes still make a sound. */
 const MIN_NOTE_SECONDS = 0.06;
@@ -20,6 +25,22 @@ function midiOf(note) {
     const pitch = note.Pitch;
     if (!pitch) return null;
     return (pitch.Octave + 1) * 12 + pitch.FundamentalNote + pitch.AccidentalHalfTones;
+}
+
+/**
+ * A drum note's General MIDI percussion key, or null if the note is pitched.
+ * Unpitched notes still carry a pitch in OSMD (that is how they get drawn on
+ * the right line), so the part's MIDI channel is what marks them as drums.
+ */
+function percussionKey(note, midi) {
+    const instrument = note.ParentStaff?.ParentInstrument;
+    if (instrument?.MidiInstrumentId !== PERCUSSION) return null;
+
+    // The score's own <midi-unpitched> mapping is authoritative when it exists.
+    const sub = instrument.SubInstruments?.find((s) => s.idString === note.PlaybackInstrumentId);
+    if (sub?.fixedKey > 0) return sub.fixedKey - 1; // MusicXML counts from 1
+
+    return gmKeyFromStaffPosition(midi);
 }
 
 export class Score {
@@ -115,10 +136,12 @@ export class Score {
                     if (midi === null) continue;
 
                     longestHere = Math.max(longestHere, lengthWhole);
+                    const drumKey = percussionKey(note, midi);
                     notes.push({
                         time,
                         duration: Math.max(toSeconds(lengthWhole, bpm), MIN_NOTE_SECONDS),
                         midi,
+                        drumKey, // non-null for a note on a percussion staff
                         step: stepIndex,
                     });
                 }
