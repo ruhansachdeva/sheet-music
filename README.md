@@ -5,8 +5,12 @@ a metronome, and the current note lit up on the score.
 
 - **MusicXML** (`.musicxml`, `.xml`, `.mxl`) and **MIDI** (`.mid`, `.midi`) load
   straight in the browser.
-- **Photos and PDFs** go to Claude, which reads them into MusicXML and asks a
-  question when something on the page is genuinely ambiguous.
+- **Photos and PDFs** are read into MusicXML for you, with a question asked when
+  something on the page is genuinely ambiguous.
+- **Take a photo** on a phone: the camera button opens the rear camera, so you
+  can point it at a page and have it played back.
+- **Write it yourself**: a note writer with a piano keyboard, note values, rests,
+  dots and undo, which engraves and plays as you write.
 - **Instruments**: piano, violin, cello, flute, clarinet, trumpet, alto sax,
   tenor sax, guitar, drums.
 - **Timing**: tempo, time signatures, dotted notes, ties, triplets and other
@@ -98,7 +102,17 @@ and a kit on channel 10; the channel-10 track plays as drums whichever
 instrument is picked. MIDI is already at concert pitch, so it is never
 transposed.
 
-**Uploading** — use the file picker, or drop a file anywhere on the page.
+**Uploading** — use the file picker, or drop a file anywhere on the page. On a
+phone there is a **Take a photo** button as well, which opens the rear camera
+directly rather than the photo library. It only appears on devices that have a
+camera.
+
+**Writing a score** — press **Write it yourself**. Pick a note value, then tap
+keys to add notes; each one sounds as you add it, and the score re-engraves
+underneath. **Rest** adds a rest of the chosen value, **Undo** steps back
+(50 deep) and **Clear** starts again. The title, time signature, tempo and clef
+are along the top. Press **Done** when finished, and **Edit notes** beside the
+title to go back in. Notes that run past a bar line are split and tied for you.
 
 **Photos and PDFs** (needs a key) — upload a photo of a page, or a PDF. Pick the
 instrument first: it is passed to Claude as context. Claude returns MusicXML plus
@@ -123,9 +137,10 @@ time.
 ## Automated checks
 
 ```sh
-npm run check        # every measure in samples/ adds up to its time signature
-npm test             # loads each sample in headless Chrome, checks the timeline
-npm run test:audio   # also plays, and watches the audio clock and cursor
+npm run check            # every measure in samples/ adds up to its time signature
+npm test                 # drives the app in headless Chrome
+npm run test:audio       # also plays, and watches the audio clock and cursor
+npm run test:editor      # the note writer's model and MusicXML output
 npm run test:transcribe  # end to end through the model - needs a key
 ```
 
@@ -134,8 +149,15 @@ protocol and asserts on the timeline the timing engine produces: that a dotted
 quarter is 1.5 beats, that six triplet eighths are a third of a beat each, that
 the tied F is one note of a whole note's length, that the repeat unrolls into a
 second pass, that 6/8 produces six clicks a bar, that drum notes map to the right
-kit pieces, and that the engraving is laid out at a sensible size. It needs a
-Chromium binary — it finds Playwright's cached one, or set `CHROME_PATH`.
+kit pieces, and that the engraving is laid out at a sensible size. It also writes
+a score through the note writer's own interface, and answers a set of clarifying
+questions. It needs a Chromium binary — it finds Playwright's cached one, or set
+`CHROME_PATH`.
+
+`npm run test:editor` checks the writer's model directly in Node: that lengths
+decompose into writable note values, that notes crossing a bar line are split
+and tied, and that the MusicXML it produces passes the same measure-duration
+check as the samples.
 
 `npm run test:transcribe` has no photograph to work from, so it renders a sample in
 the browser, screenshots the engraving, and posts that image to
@@ -157,6 +179,7 @@ public/js/midi.js    parses MIDI, draws the piano roll
 public/js/player.js  the audio clock, scheduler and metronome
 public/js/drums.js   General MIDI percussion keys to drum machine sounds
 public/js/questions.js  the clarifying-question panel
+public/js/editor/       writing a score by hand: model.js and ui.js
 tools/               the checks above, and the MIDI sample generator
 ```
 
@@ -192,6 +215,15 @@ Libraries come from jsDelivr, so there is no build step:
 and its cursor, [smplr](https://github.com/danigb/smplr) 1.1.0 for soundfont
 instruments and the drum machine, and
 [@tonejs/midi](https://github.com/Tonejs/Midi) 2.0.28 for MIDI files.
+
+## On a phone
+
+The layout is built mobile first. The transport docks to the bottom of the
+screen in thumb reach, with tempo, metronome and size behind a **More** button;
+the loading controls fold away once music is on screen; the score is engraved to
+fit the width, and re-fits when you turn the phone. Part names and the in-score
+title are dropped on narrow screens, since the page shows the title anyway and
+both of them overflowed a small screen.
 
 ## Known limits
 
