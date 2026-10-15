@@ -11,10 +11,15 @@
 // Needs an API key. On Gemini's free tier this costs nothing to run.
 
 import { spawn } from "node:child_process";
+// The server answers a read only once the whole score is written, which can
+// take longer than the 300 seconds Node's built-in fetch waits for headers.
+import { Agent, FormData, fetch } from "undici";
 import { once } from "node:events";
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+
+const patient = new Agent({ headersTimeout: 15 * 60 * 1000, bodyTimeout: 15 * 60 * 1000 });
 
 const PORT = Number(process.env.TEST_PORT ?? 3114);
 const ROOT = new URL("..", import.meta.url).pathname;
@@ -257,6 +262,7 @@ async function main() {
             const response = await fetch(`http://localhost:${PORT}/api/transcribe`, {
                 method: "POST",
                 body: form,
+                dispatcher: patient,
             });
             const result = await response.json();
             const seconds = ((Date.now() - started) / 1000).toFixed(0);
