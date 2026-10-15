@@ -1241,3 +1241,8 @@ button.danger {
     color: var(--accent);
     font-weight: 600;
 }
+
+/* The notes of a score you wrote can be tapped to select them. */
+.score.tappable .vf-stavenote {
+    cursor: pointer;
+}
