@@ -99,42 +99,67 @@ class DevTools {
 }
 
 /**
- * Compares two note lists. Times are in beats, not seconds, so that a tempo
- * misread does not masquerade as every note being wrong - tempo is reported
- * separately.
+ * Compares two note lists by matching them up, not by position: one note too
+ * many early on would otherwise shift every later note and report a near-total
+ * failure for a single mistake.
+ *
+ * Each written note looks for an unclaimed note at the same moment. A note at
+ * the right moment and the right pitch is a hit; one at the right moment with
+ * the wrong pitch is a misread, which is a different thing from a note that is
+ * not there at all. Times are in beats, so a tempo misread does not masquerade
+ * as every note being wrong - tempo is reported separately.
  */
+const CLOSE = 0.05;
+
 function compare(original, read) {
-    const pairs = Math.min(original.length, read.length);
-    let pitch = 0;
-    let onset = 0;
-    let duration = 0;
-    const wrong = [];
+    const claimed = new Set();
+    let hits = 0;
+    let wrongPitch = 0;
+    let wrongLength = 0;
+    const notes = [];
 
-    for (let i = 0; i < pairs; i++) {
-        const a = original[i];
-        const b = read[i];
-        const samePitch = a.midi === b.midi;
-        const sameOnset = Math.abs(a.beat - b.beat) < 0.05;
-        const sameLength = Math.abs(a.beats - b.beats) < 0.05;
+    for (const a of original) {
+        // Prefer a note of the same pitch at this moment; fall back to any
+        // unclaimed note at this moment, which is then a misread pitch.
+        const atMoment = read
+            .map((b, index) => ({ b, index }))
+            .filter(({ b, index }) => !claimed.has(index) && Math.abs(a.beat - b.beat) < CLOSE);
+        const match = atMoment.find(({ b }) => b.midi === a.midi) ?? atMoment[0];
 
-        if (samePitch) pitch += 1;
-        if (sameOnset) onset += 1;
-        if (sameLength) duration += 1;
-        if ((!samePitch || !sameLength) && wrong.length < 6) {
-            wrong.push(
-                `#${i + 1} expected ${a.midi}@${a.beat.toFixed(2)}×${a.beats.toFixed(2)}` +
-                    ` got ${b.midi}@${b.beat.toFixed(2)}×${b.beats.toFixed(2)}`,
+        if (!match) {
+            if (notes.length < 6) notes.push(`missing ${a.midi}@${a.beat.toFixed(2)}`);
+            continue;
+        }
+
+        claimed.add(match.index);
+        const samePitch = match.b.midi === a.midi;
+        const sameLength = Math.abs(match.b.beats - a.beats) < CLOSE;
+
+        if (samePitch) hits += 1;
+        else wrongPitch += 1;
+        if (!sameLength) wrongLength += 1;
+
+        if ((!samePitch || !sameLength) && notes.length < 6) {
+            notes.push(
+                `expected ${a.midi}@${a.beat.toFixed(2)}×${a.beats.toFixed(2)}` +
+                    ` got ${match.b.midi}@${match.b.beat.toFixed(2)}×${match.b.beats.toFixed(2)}`,
             );
         }
     }
 
+    const found = hits + wrongPitch;
+    const extra = read.length - claimed.size;
+    if (extra > 0 && notes.length < 6) notes.push(`${extra} note(s) read that are not there`);
+
     return {
         expected: original.length,
         got: read.length,
-        pitch: pairs ? pitch / pairs : 0,
-        onset: pairs ? onset / pairs : 0,
-        duration: pairs ? duration / pairs : 0,
-        wrong,
+        // Of the notes written, how many were found at the right moment at all.
+        placed: original.length ? found / original.length : 0,
+        pitch: original.length ? hits / original.length : 0,
+        duration: found ? (found - wrongLength) / found : 0,
+        extra,
+        notes,
     };
 }
 
@@ -174,6 +199,14 @@ async function main() {
     const page = await DevTools.connect(target.webSocketDebuggerUrl);
     await page.send("Runtime.enable");
     await page.send("Page.enable");
+    // A desktop-width viewport, so the staff is engraved at a readable size
+    // rather than squeezed into the headless default of 800px.
+    await page.send("Emulation.setDeviceMetricsOverride", {
+        width: 1400,
+        height: 1000,
+        deviceScaleFactor: 1,
+        mobile: false,
+    });
     for (let i = 0; i < 150; i++) {
         try { if (await page.evaluate("return Boolean(window.sheetMusic)")) break; } catch {}
         await sleep(150);
@@ -212,7 +245,7 @@ async function main() {
             const shot = await page.send("Page.captureScreenshot", {
                 format: "png",
                 captureBeyondViewport: true,
-                clip: { ...box, scale: 2 },
+                clip: { ...box, scale: 3 },
             });
             const image = Buffer.from(shot.data, "base64");
 
@@ -253,12 +286,13 @@ async function main() {
             const diff = compare(original.notes, read.notes);
             const pct = (n) => `${Math.round(n * 100)}%`;
             console.log(`  read in ${seconds}s, ${result.questions.length} question(s)`);
-            console.log(`  notes      ${diff.got} read vs ${diff.expected} written`);
-            console.log(`  pitches    ${pct(diff.pitch)}`);
-            console.log(`  onsets     ${pct(diff.onset)}`);
-            console.log(`  lengths    ${pct(diff.duration)}`);
+            console.log(`  notes      ${diff.got} read vs ${diff.expected} written` +
+                (diff.extra > 0 ? `, ${diff.extra} extra` : ""));
+            console.log(`  placed     ${pct(diff.placed)} of written notes found`);
+            console.log(`  pitches    ${pct(diff.pitch)} of written notes correct`);
+            console.log(`  lengths    ${pct(diff.duration)} of those found`);
             console.log(`  tempo      ${read.bpm ?? "none"} vs ${original.bpm ?? "none"}`);
-            for (const line of diff.wrong) console.log(`    ${line}`);
+            for (const line of diff.notes) console.log(`    ${line}`);
             console.log(`  saved to ${xmlPath}`);
 
             if (diff.got !== diff.expected) {
