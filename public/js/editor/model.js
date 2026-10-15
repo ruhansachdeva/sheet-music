@@ -52,6 +52,26 @@ export function decompose(ticks) {
 export const SHARP = 1;
 export const FLAT = -1;
 
+/** Major keys, by the number of sharps (positive) or flats (negative). */
+export const KEY_SIGNATURES = [
+    { fifths: 0, name: "C" },
+    { fifths: 1, name: "G" },
+    { fifths: 2, name: "D" },
+    { fifths: 3, name: "A" },
+    { fifths: 4, name: "E" },
+    { fifths: 5, name: "B" },
+    { fifths: -1, name: "F" },
+    { fifths: -2, name: "B♭" },
+    { fifths: -3, name: "E♭" },
+    { fifths: -4, name: "A♭" },
+    { fifths: -5, name: "D♭" },
+];
+
+/** How a key signature spells a black key when nothing says otherwise. */
+export function keyPrefers(fifths) {
+    return fifths < 0 ? FLAT : SHARP;
+}
+
 /** A fresh, empty score. `kind` is "pitched" or "drums". */
 export function emptyScore(kind = "pitched") {
     return {
@@ -84,8 +104,12 @@ export function spellMidi(midi, prefer = SHARP) {
     return { step, alter, octave };
 }
 
-/** The pitches or kit pieces a note sounds, in the order they are written. */
-function pitchesOf(note) {
+/**
+ * The pitches or kit pieces a note sounds, in the order they are written. A
+ * pitch is spelled the way the key that was pressed was labelled, falling back
+ * to the key signature's preference.
+ */
+function pitchesOf(note, fallback = SHARP) {
     if (note.drums?.length) {
         return note.drums.map((gm) => {
             const piece = KIT.find((k) => k.gm === gm);
@@ -93,7 +117,9 @@ function pitchesOf(note) {
         });
     }
     const midis = note.midis?.length ? note.midis : [note.midi];
-    return midis.map((midi) => ({ pitch: spellMidi(midi, note.prefer ?? SHARP) }));
+    return midis.map((midi) => ({
+        pitch: spellMidi(midi, note.spell?.[midi] ?? note.prefer ?? fallback),
+    }));
 }
 
 function escapeXml(text) {
@@ -178,7 +204,7 @@ export function toMusicXml(score) {
 
                 // A chord is one note followed by the rest of its pitches,
                 // each marked as sounding with it rather than after it.
-                const voices = note.rest ? [null] : pitchesOf(note);
+                const voices = note.rest ? [null] : pitchesOf(note, keyPrefers(score.fifths));
 
                 for (const [voiceIndex, voice] of voices.entries()) {
                     current.push({

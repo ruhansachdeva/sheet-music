@@ -559,6 +559,44 @@ async function run() {
         check("Done closes the writer", edited.closed, true);
         check("and it can be reopened", edited.canReopen, true);
 
+        // --- the key pressed is the note written -----------------------------
+        console.log("\nspelling and key signatures");
+        const spelling = await page.evaluate(`
+            const editor = window.sheetMusic.editor;
+            const blackKeys = () => [...document.querySelectorAll(".key.black")];
+            const labels = () => blackKeys().map((k) => k.textContent);
+            const written = () => [...editor.toMusicXml().matchAll(
+                /<step>(\\w)<\\/step>\\s*(?:<alter>(-?\\d)<\\/alter>)?/g,
+            )].map((m) => m[1] + (m[2] === "1" ? "#" : m[2] === "-1" ? "b" : ""));
+            const setKey = async (fifths) => {
+                const select = document.querySelector('[aria-label="Key signature"]');
+                select.value = String(fifths);
+                select.dispatchEvent(new Event("change"));
+                await new Promise((r) => setTimeout(r, 150));
+            };
+            const tapAllBlack = () => blackKeys().forEach((k) => k.click());
+            const stack = [...document.querySelectorAll(".editor-actions button")]
+                .find((b) => b.textContent === "Stack");
+
+            const out = { stackStartsOff: !stack.classList.contains("chosen") };
+            await setKey(0); editor.clear(); tapAllBlack();
+            out.c = { labels: labels(), written: written() };
+            await setKey(-1); editor.clear(); tapAllBlack();
+            out.f = { labels: labels(), written: written(), fifths: /<fifths>-1</.test(editor.toMusicXml()) };
+            await setKey(2); editor.clear(); tapAllBlack();
+            out.d = { labels: labels(), written: written(), fifths: /<fifths>2</.test(editor.toMusicXml()) };
+            await setKey(0); editor.clear();
+            return out;
+        `);
+        check("Stack starts switched off, and looks it", spelling.stackStartsOff, true);
+        check("C major: the keys read C# Eb F# Ab Bb", spelling.c.labels, ["C♯", "E♭", "F♯", "A♭", "B♭"]);
+        check("and that is what gets written", spelling.c.written, ["C#", "Eb", "F#", "Ab", "Bb"]);
+        check("F major spells them as flats", spelling.f.written, ["Db", "Eb", "Gb", "Ab", "Bb"]);
+        check("with the labels to match", spelling.f.labels, ["D♭", "E♭", "G♭", "A♭", "B♭"]);
+        check("and one flat in the key signature", spelling.f.fifths, true);
+        check("D major spells them as sharps", spelling.d.written, ["C#", "D#", "F#", "G#", "A#"]);
+        check("with two sharps in the key signature", spelling.d.fifths, true);
+
         // --- stacking notes into chords --------------------------------------
         console.log("\nchords");
         const chords = await page.evaluate(`
