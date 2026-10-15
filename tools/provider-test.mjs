@@ -15,7 +15,8 @@ function check(label, actual, expected) {
 
 /**
  * What the fake does next, per model: a list of statuses to answer with, the
- * last one repeating. Every request is counted by model.
+ * last one repeating. A status can be [status, retryAfterSeconds]. Every
+ * request is counted by model.
  */
 let script = {};
 let asked = {};
@@ -27,10 +28,11 @@ const fake = createServer(async (request, response) => {
     asked[model] = (asked[model] ?? 0) + 1;
 
     const plan = script[model] ?? [200];
-    const status = plan[Math.min(asked[model] - 1, plan.length - 1)];
+    const step = plan[Math.min(asked[model] - 1, plan.length - 1)];
+    // A tiny Retry-After by default, so the provider's waits take milliseconds.
+    const [status, retryAfter] = Array.isArray(step) ? step : [step, 0.01];
     if (status !== 200) {
-        // A tiny Retry-After, so the provider's waits take milliseconds.
-        response.writeHead(status, { "content-type": "application/json", "retry-after": "0.01" });
+        response.writeHead(status, { "content-type": "application/json", "retry-after": String(retryAfter) });
         response.end(JSON.stringify({ error: { message: `fake ${status}` } }));
         return;
     }
@@ -79,8 +81,22 @@ try {
     console.log("\nfor as long as patience allows, then a lighter one reads it");
     const long = await read({ "gemini-flash-latest": [503], "gemini-flash-lite-latest": [200] });
     check("Flash-Lite answers once Flash has been busy too long", long.model, "gemini-flash-lite-latest");
-    check("and the reading says a lighter model stood in", long.fallback, true);
+    check("and the reading says a lighter model stood in, and why", long.fallback, "busy");
     check("after Flash was asked more than the old three retries", long.asked["gemini-flash-latest"] > 4, true);
+
+    console.log("\na brief rate limit is waited out");
+    const minute = await read({ "gemini-flash-latest": [429, 429, 200] });
+    check("Flash answers once the per-minute limit clears", [minute.model, minute.fallback],
+        ["gemini-flash-latest", false]);
+
+    console.log("\nthe daily limit is not waited out, it is stepped around");
+    const started = Date.now();
+    // Google's answer once the day's requests are spent: come back in 13 hours.
+    const daily = await read({ "gemini-flash-latest": [[429, 46755]], "gemini-flash-lite-latest": [200] });
+    check("Flash-Lite reads it, since its allowance is separate", daily.model, "gemini-flash-lite-latest");
+    check("and the reading says the usual model hit its limit", daily.fallback, "limit");
+    check("without waiting on a 13-hour Retry-After", Date.now() - started < 2000, true);
+    check("or asking Flash again", daily.asked["gemini-flash-latest"], 1);
 
     console.log("\nother failures are retried a few times, not waited out");
     const broken = await read({ "gemini-flash-latest": [500] });

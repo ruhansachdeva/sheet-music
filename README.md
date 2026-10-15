@@ -55,8 +55,11 @@ Set both and Gemini wins; `PROVIDER=claude` in `.env` forces the other.
 Gemini's free tier shares capacity, so a model is sometimes too busy to answer,
 often for minutes at a time. The provider handles that itself: it keeps asking
 `gemini-flash-latest` for up to five minutes, as often as Google allows, and
-only then falls through to `gemini-flash-lite-latest`. Flash-Lite reads
-notation noticeably worse, so when it does the reading, the page says so.
+only then falls through to `gemini-flash-lite-latest`. The same happens once
+Flash's daily allowance is spent - 20 requests a day on the free tier, reset at
+midnight Pacific - since Flash-Lite has an allowance of its own. Flash-Lite
+reads notation noticeably worse, so when it does the reading, the page says so,
+and why.
 Optional overrides, none of them usually needed:
 
 | Variable | Default | Why you might change it |
