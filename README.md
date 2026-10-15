@@ -114,6 +114,11 @@ phone there is a **Take a photo** button as well, which opens the rear camera
 directly rather than the photo library. It only appears on devices that have a
 camera.
 
+**Writing drums** — pick **Drums** before pressing **Write it yourself**, and
+the keyboard becomes the kit: hi-hat, open hat, ride, crash, three toms, snare
+and kick. It writes unpitched notes on a percussion staff with cross noteheads
+for the cymbals, so it looks like drum notation and plays through the kit.
+
 **Writing a score** — press **Write it yourself**. Pick a note value, then tap
 keys to add notes; each one sounds as you add it, and the score re-engraves
 underneath. **Rest** adds a rest of the chosen value, **Undo** steps back

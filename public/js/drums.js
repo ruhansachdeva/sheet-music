@@ -70,6 +70,37 @@ const STAFF_POSITION_TO_GM = {
     83: 46, // B5  - open hi-hat
 };
 
+/**
+ * The kit the note writer offers, in the order it is laid out. `staff` is the
+ * MIDI number of the staff position the piece is notated on, which is the same
+ * table as STAFF_POSITION_TO_GM read the other way round, so writing and
+ * reading cannot disagree about where a drum sits.
+ */
+export const KIT = [
+    { gm: 42, label: "Hi-hat", staff: 79, cross: true },
+    { gm: 46, label: "Open hat", staff: 83, cross: true },
+    { gm: 51, label: "Ride", staff: 77, cross: true },
+    { gm: 49, label: "Crash", staff: 81, cross: true },
+    { gm: 50, label: "Tom 1", staff: 76 },
+    { gm: 47, label: "Tom 2", staff: 71 },
+    { gm: 45, label: "Tom 3", staff: 69 },
+    { gm: 38, label: "Snare", staff: 72 },
+    { gm: 36, label: "Kick", staff: 65 },
+];
+
+/** General MIDI names, for the score-instrument entries a drum part needs. */
+export const GM_DRUM_NAMES = {
+    36: "Bass Drum 1",
+    38: "Acoustic Snare",
+    42: "Closed Hi-Hat",
+    45: "Low Tom",
+    46: "Open Hi-Hat",
+    47: "Low-Mid Tom",
+    49: "Crash Cymbal 1",
+    50: "High Tom",
+    51: "Ride Cymbal 1",
+};
+
 /** Turns a notated staff position into a drum sound, for unmapped drum staves. */
 export function gmKeyFromStaffPosition(midi) {
     if (STAFF_POSITION_TO_GM[midi]) return STAFF_POSITION_TO_GM[midi];
