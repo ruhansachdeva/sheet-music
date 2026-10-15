@@ -352,6 +352,23 @@ export class Editor {
         this.changed();
     }
 
+    /**
+     * The note sounding at a point in the score, given in whole notes from the
+     * start, by index - or null past the end, where only padding rests are.
+     * A note split across a barline is drawn as two tied notes, and either
+     * half finds it.
+     */
+    indexAt(wholeNotes) {
+        // Half a tick of slack: a triplet's position comes back as a float.
+        const ticks = wholeNotes * DIVISIONS * 4 + 0.5;
+        let start = 0;
+        for (const [index, note] of this.score.notes.entries()) {
+            start += ticksOf(note);
+            if (ticks < start) return index;
+        }
+        return null;
+    }
+
     /** Seconds into the score at which the selected note starts, or null. */
     selectedOnset() {
         if (this.selected === null) return null;
@@ -766,7 +783,7 @@ export class Editor {
         if (this.score.notes.length === 0) {
             // No notes, no options: a listbox with nothing in it is announced
             // as a list that cannot be navigated, so this is plain text.
-            strip.appendChild(el("span", "strip-empty", "Notes you write appear here. Tap one to change it."));
+            strip.appendChild(el("span", "strip-empty", "Notes you write appear here. Tap one, or a note on the score, to change it."));
             return strip;
         }
         strip.setAttribute("role", "listbox");
