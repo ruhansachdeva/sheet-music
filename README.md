@@ -119,8 +119,9 @@ octave, 1 2 4 8 6 for whole to sixteenth (the fraction of a whole note), `.`
 for a dot, R for a rest, S for chord, Backspace to undo or delete, Esc to stop
 editing a note.
 
-**Fixing a note** — every note you write appears as a chip in a strip above the
-note values. Tap one to select it; it lights up on the score. Then a key
+**Fixing a note** — tap it on the score, or tap its chip in the strip above the
+note values; either selects it, and it lights up on the score. A tap only has
+to land near a note, and opens the writer if it is shut. Then a key
 replaces its pitch, a note value changes its length, **Rest** turns it into a
 rest, and **Delete** removes it. **Done editing** goes back to adding at the
 end.
