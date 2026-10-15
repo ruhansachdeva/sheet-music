@@ -643,6 +643,52 @@ async function run() {
         check("D major spells them as sharps", spelling.d.written, ["C#", "D#", "F#", "G#", "A#"]);
         check("with two sharps in the key signature", spelling.d.fifths, true);
 
+        // --- fixing a note in the middle -------------------------------------
+        console.log("\nediting any note");
+        const edits = await page.evaluate(`
+            const editor = window.sheetMusic.editor;
+            editor.clear();
+            if (editor.selected !== null) editor.select(editor.selected);
+            document.querySelectorAll(".length")[2].click();
+            const key = (n) => [...document.querySelectorAll(".key")]
+                .find((k) => k.getAttribute("aria-label") === n);
+            const chips = () => [...document.querySelectorAll(".chip")];
+            const action = (t) => [...document.querySelectorAll(".editor-actions button")]
+                .find((b) => b.textContent === t);
+            const wait = (ms = 250) => new Promise((r) => setTimeout(r, ms));
+
+            for (const n of ["C4", "D4", "E4", "F4", "G4"]) { key(n).click(); await wait(40); }
+            await wait(400);
+            const written = chips().map((c) => c.textContent);
+
+            chips()[1].click(); await wait(300);
+            const litStep = window.sheetMusic.score.stepIndex;
+            key("A4").click(); await wait(400);                         // D -> A
+            chips()[2].click(); await wait();
+            document.querySelectorAll(".length")[1].click(); await wait(400); // E -> half
+            chips()[3].click(); await wait();
+            action("Delete").click(); await wait(400);                  // drop the F
+            action("Done editing").click(); await wait();
+            key("B4").click(); await wait(500);                         // add at the end
+            editor.undo(); await wait(400);                             // undo still works
+
+            const timeline = window.sheetMusic.timeline;
+            const out = {
+                written,
+                after: chips().map((c) => c.textContent),
+                litStep,
+                midis: timeline.notes.map((n) => n.midi),
+                durations: timeline.notes.map((n) => Math.round(n.duration * 100) / 100),
+            };
+            editor.clear();
+            return out;
+        `);
+        check("the strip lists what was written", edits.written, ["C4", "D4", "E4", "F4", "G4"]);
+        check("selecting a note lights it on the score", edits.litStep, 1);
+        check("a key replaces the selected pitch, Delete removes one", edits.after, ["C4", "A4", "E4", "G4"]);
+        check("so the score holds the edited notes", edits.midis, [60, 69, 64, 67]);
+        check("with the new length on the third", edits.durations, [0.6, 0.6, 1.2, 0.6]);
+
         // --- stacking notes into chords --------------------------------------
         console.log("\nchords");
         const chords = await page.evaluate(`

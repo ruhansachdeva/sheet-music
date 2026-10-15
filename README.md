@@ -114,6 +114,12 @@ phone there is a **Take a photo** button as well, which opens the rear camera
 directly rather than the photo library. It only appears on devices that have a
 camera.
 
+**Fixing a note** — every note you write appears as a chip in a strip above the
+note values. Tap one to select it; it lights up on the score. Then a key
+replaces its pitch, a note value changes its length, **Rest** turns it into a
+rest, and **Delete** removes it. **Done editing** goes back to adding at the
+end.
+
 **Chords** — press **Stack**, then tap the notes that belong together: each one
 joins the note before it rather than following it. Press it again to go back to
 writing one note at a time. It works on the kit too, for a kick and a hi-hat on

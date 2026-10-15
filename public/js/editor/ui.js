@@ -5,7 +5,17 @@
 // length from a palette of note values. Each tap appends to the score, which is
 // re-engraved as you go.
 
-import { DURATIONS, FLAT, KEY_SIGNATURES, SHARP, emptyScore, toMusicXml } from "./model.js";
+import {
+    DIVISIONS,
+    DURATIONS,
+    FLAT,
+    KEY_SIGNATURES,
+    SHARP,
+    emptyScore,
+    spellMidi,
+    ticksOf,
+    toMusicXml,
+} from "./model.js";
 import { KIT } from "../drums.js";
 
 /** One octave of keys, drawn in keyboard order. */
@@ -59,13 +69,14 @@ const TIME_SIGNATURES = [
 ];
 
 export class Editor {
-    constructor(container, { onChange, onClose, onPreview, onPreviewDrum, onPlay }) {
+    constructor(container, { onChange, onClose, onPreview, onPreviewDrum, onPlay, onSelect }) {
         this.container = container;
         this.onChange = onChange;
         this.onClose = onClose;
         this.onPreview = onPreview;
         this.onPreviewDrum = onPreviewDrum;
         this.onPlay = onPlay;
+        this.onSelect = onSelect;
         this.playing = false;
         this.settingsOpen = true;
         this.score = emptyScore();
@@ -75,6 +86,8 @@ export class Editor {
         // Must start as a real boolean: classList.toggle(name, undefined)
         // toggles rather than forcing off, which drew Stack as switched on.
         this.stacking = false;
+        // The note being edited, by index, or null when adding at the end.
+        this.selected = null;
         this.history = [];
     }
 
@@ -101,6 +114,7 @@ export class Editor {
         // to open or fold them sticks.
         this.settingsOpen = window.matchMedia?.("(min-width: 700px)").matches ?? true;
         this.score = score ? structuredClone(score) : emptyScore(kind);
+        this.selected = null;
         this.history = [];
         this.render();
         this.container.hidden = false;
@@ -118,6 +132,7 @@ export class Editor {
     }
 
     changed() {
+        this.refreshStrip();
         this.refreshCount();
         if (this.summaryEl) this.summaryEl.textContent = this.summaryText();
         this.onChange?.(this.score);
@@ -132,6 +147,7 @@ export class Editor {
 
     addNote(midi, prefer = SHARP) {
         this.onPreview?.(midi);
+        if (this.editSelected("midis", midi, prefer)) return;
         if (this.joinToLast("midis", midi, prefer)) return;
 
         this.remember();
@@ -142,6 +158,72 @@ export class Editor {
             dots: this.dotted ? 1 : 0,
         });
         this.changed();
+    }
+
+    /** The note being edited, or null. */
+    get selectedNote() {
+        return this.selected === null ? null : this.score.notes[this.selected] ?? null;
+    }
+
+    /**
+     * With a note selected, a key changes that note rather than adding one:
+     * it replaces the pitch, or with Stack on, adds to its chord. Returns
+     * whether it was taken.
+     */
+    editSelected(field, value, prefer) {
+        const note = this.selectedNote;
+        if (!note) return false;
+
+        this.remember();
+        const current = note.rest ? [] : note[field] ?? [];
+        const stackOnto = this.stacking && !note.rest && current.length > 0;
+        const values = stackOnto
+            ? [...new Set([...current, value])].sort((a, b) => a - b)
+            : [value];
+
+        // A rest that gets a key pressed on it becomes a note.
+        delete note.rest;
+        delete note.midis;
+        delete note.drums;
+        note[field] = values;
+        if (prefer !== undefined) {
+            note.spell = stackOnto ? { ...note.spell, [value]: prefer } : { [value]: prefer };
+        }
+        this.changed();
+        return true;
+    }
+
+    /** Selects a note to edit, or with the same index again, stops editing. */
+    select(index) {
+        this.selected = index === this.selected ? null : index;
+        // Match the palette to the note, so its length shows as chosen.
+        const note = this.selectedNote;
+        if (note) {
+            this.duration = note.duration;
+            this.dotted = Boolean(note.dots);
+        }
+        this.render();
+        this.onSelect?.(this.selectedOnset());
+    }
+
+    deleteSelected() {
+        if (this.selected === null) return;
+        this.remember();
+        this.score.notes.splice(this.selected, 1);
+        this.selected = this.score.notes.length
+            ? Math.min(this.selected, this.score.notes.length - 1)
+            : null;
+        this.render();
+        this.changed();
+    }
+
+    /** Seconds into the score at which the selected note starts, or null. */
+    selectedOnset() {
+        if (this.selected === null) return null;
+        const ticks = this.score.notes
+            .slice(0, this.selected)
+            .reduce((sum, note) => sum + ticksOf(note), 0);
+        return (ticks / DIVISIONS) * (60 / this.score.tempo);
     }
 
     /**
@@ -165,6 +247,7 @@ export class Editor {
     /** Adds a hit on one piece of the kit. */
     addDrum(gm) {
         this.onPreviewDrum?.(gm);
+        if (this.editSelected("drums", gm)) return;
         if (this.joinToLast("drums", gm)) return;
 
         this.remember();
@@ -178,6 +261,17 @@ export class Editor {
 
     addRest() {
         this.stacking = false;
+        const note = this.selectedNote;
+        if (note) {
+            this.remember();
+            delete note.midis;
+            delete note.drums;
+            delete note.spell;
+            note.rest = true;
+            this.render();
+            this.changed();
+            return;
+        }
         this.remember();
         this.score.notes.push({
             rest: true,
@@ -207,9 +301,34 @@ export class Editor {
         this.container.append(
             this.renderHeader(),
             this.renderSettings(),
+            this.renderStrip(),
             this.renderPalette(),
             this.score.kind === "drums" ? this.renderKit() : this.renderKeyboard(),
         );
+        this.scrollStrip();
+    }
+
+    /**
+     * Rebuilds only the strip of notes. Adding a note changes nothing else in
+     * the writer, so there is no reason to rebuild the keyboard under a finger.
+     */
+    refreshStrip() {
+        const old = this.container.querySelector(".editor-strip");
+        if (!old) return;
+        old.replaceWith(this.renderStrip());
+        this.scrollStrip();
+    }
+
+    /** Keeps the note being edited, or the newest, in view in the strip.
+     *  Scrolled by hand: scrollIntoView would also scroll the page. */
+    scrollStrip() {
+        const strip = this.container.querySelector(".editor-strip");
+        const target = strip?.querySelector(".chip.selected") ?? strip?.querySelector(".chip:last-child");
+        if (!strip || !target) return;
+        const left = target.offsetLeft - strip.offsetLeft;
+        if (left < strip.scrollLeft || left + target.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+            strip.scrollLeft = left - strip.clientWidth / 2 + target.offsetWidth / 2;
+        }
     }
 
     /** The app tells the writer when playback starts and stops. */
@@ -350,6 +469,13 @@ export class Editor {
             button.classList.toggle("chosen", duration.name === this.duration);
             button.addEventListener("click", () => {
                 this.duration = duration.name;
+                // With a note selected, the value changes that note.
+                const note = this.selectedNote;
+                if (note && note.duration !== duration.name) {
+                    this.remember();
+                    note.duration = duration.name;
+                    this.changed();
+                }
                 this.render();
             });
             lengths.appendChild(button);
@@ -364,6 +490,12 @@ export class Editor {
         dot.classList.toggle("chosen", this.dotted);
         dot.addEventListener("click", () => {
             this.dotted = !this.dotted;
+            const note = this.selectedNote;
+            if (note) {
+                this.remember();
+                note.dots = this.dotted ? 1 : 0;
+                this.changed();
+            }
             this.render();
         });
         lengths.appendChild(dot);
@@ -388,7 +520,16 @@ export class Editor {
         clear.addEventListener("click", () => this.clear());
 
         this.count = el("span", "editor-count");
-        actions.append(stack, rest, undo, clear, this.count);
+        if (this.selectedNote) {
+            // Editing one note: offer to remove it, or to go back to adding.
+            const remove = el("button", "danger", "Delete");
+            remove.addEventListener("click", () => this.deleteSelected());
+            const finish = el("button", null, "Done editing");
+            finish.addEventListener("click", () => this.select(this.selected));
+            actions.append(stack, rest, remove, undo, finish, this.count);
+        } else {
+            actions.append(stack, rest, undo, clear, this.count);
+        }
 
         palette.append(lengths, actions);
         return palette;
@@ -427,6 +568,32 @@ export class Editor {
         return wrap;
     }
 
+    /**
+     * The notes written so far, one chip each. Tapping one selects it for
+     * editing - the only way to change a note that is not the last one.
+     */
+    renderStrip() {
+        const strip = el("div", "editor-strip");
+        strip.setAttribute("role", "listbox");
+        strip.setAttribute("aria-label", "Notes written");
+
+        if (this.score.notes.length === 0) {
+            strip.appendChild(el("span", "strip-empty", "Notes you write appear here. Tap one to change it."));
+            return strip;
+        }
+
+        this.score.notes.forEach((note, index) => {
+            const chip = el("button", "chip");
+            chip.setAttribute("role", "option");
+            chip.setAttribute("aria-selected", String(index === this.selected));
+            chip.classList.toggle("selected", index === this.selected);
+            chip.innerHTML = `${noteGlyph(note.duration)}<span>${escapeHtml(chipLabel(note))}</span>`;
+            chip.addEventListener("click", () => this.select(index));
+            strip.appendChild(chip);
+        });
+        return strip;
+    }
+
     /** A pad per kit piece, instead of a keyboard. */
     renderKit() {
         const wrap = el("div", "editor-kit");
@@ -460,6 +627,25 @@ function el(tag, className, text, children) {
     if (text) node.textContent = text;
     if (children) node.append(...children);
     return node;
+}
+
+/** What a chip says: the pitches, the kit pieces, or "rest". */
+function chipLabel(note) {
+    const dot = note.dots ? "." : "";
+    if (note.rest) return `rest${dot}`;
+    if (note.drums?.length) {
+        return note.drums.map((gm) => KIT.find((k) => k.gm === gm)?.label ?? gm).join("+") + dot;
+    }
+    const midis = note.midis ?? [note.midi];
+    const names = midis.map((midi) => {
+        const { step, alter, octave } = spellMidi(midi, note.spell?.[midi] ?? SHARP);
+        return `${step}${alter === 1 ? "♯" : alter === -1 ? "♭" : ""}${octave}`;
+    });
+    return names.join("·") + dot;
+}
+
+function escapeHtml(text) {
+    return String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 }
 
 function labelled(text, control) {
