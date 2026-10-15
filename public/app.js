@@ -360,7 +360,7 @@ ui.stop.addEventListener("click", () => player.stop());
 
 ui.tempo.addEventListener("input", () => {
     const bpm = Number(ui.tempo.value);
-    ui.tempoValue.textContent = `${bpm} BPM`;
+    ui.tempoValue.textContent = `${formatBpm(bpm)} BPM`;
     player.setTempo(bpm);
     ui.tempoReset.hidden = !timeline || bpm === timeline.bpm;
 });
@@ -428,7 +428,9 @@ async function loadFile(file) {
         if (name.endsWith(".mxl")) {
             sourceFile = null;
             questionPanel.hide();
-            await showScore(file, file.name); // OSMD unzips a .mxl Blob itself
+            // Unzipped to text here rather than by OSMD, so a .mxl file has
+            // MusicXML to download and a tempo map like any other score.
+            await showScore(await opensheetmusicdisplay.MXLHelper.MXLtoXMLstring(file), file.name);
         } else if (name.endsWith(".musicxml") || name.endsWith(".xml")) {
             sourceFile = null;
             questionPanel.hide();
@@ -637,7 +639,7 @@ function ready(label, loadedTimeline, note = "") {
     ui.zoomFit.hidden = true;
 
     const tempoNote = loadedTimeline.scoreBpm
-        ? `score tempo ${loadedTimeline.scoreBpm} BPM`
+        ? `score tempo ${formatBpm(loadedTimeline.scoreBpm)} BPM`
         : "no tempo marking, defaulting to 100 BPM";
     const count = loadedTimeline.notes.length;
     const parts = [`${count} ${count === 1 ? "note" : "notes"}`, tempoNote];
@@ -655,15 +657,22 @@ function showZoom(factor) {
 function setTempo(loadedTimeline) {
     const bpm = loadedTimeline.bpm;
     // A score can be marked faster or slower than the slider's usual range.
-    ui.tempo.min = Math.min(30, bpm);
-    ui.tempo.max = Math.max(240, bpm);
+    ui.tempo.min = Math.min(30, Math.floor(bpm));
+    ui.tempo.max = Math.max(240, Math.ceil(bpm));
+    // The slider moves in whole steps, but the player gets the exact tempo:
+    // "eighth = 125" is 62.5 quarter notes a minute, not 63.
     ui.tempo.value = bpm;
-    ui.tempoValue.textContent = `${bpm} BPM`;
+    ui.tempoValue.textContent = `${formatBpm(bpm)} BPM`;
     player.setTempo(bpm);
     ui.tempoReset.hidden = true;
     ui.tempoReset.textContent = loadedTimeline.scoreBpm
-        ? `Reset to score tempo (${loadedTimeline.scoreBpm} BPM)`
+        ? `Reset to score tempo (${formatBpm(loadedTimeline.scoreBpm)} BPM)`
         : "Reset to 100 BPM";
+}
+
+/** 120 as "120", 62.5 as "62.5": tempos to a tenth at most. */
+function formatBpm(bpm) {
+    return String(Math.round(bpm * 10) / 10);
 }
 
 // --- playback feedback ------------------------------------------------------
