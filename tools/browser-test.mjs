@@ -813,6 +813,38 @@ async function run() {
         check("and they sound together", chords.onsets, [0, 0, 0, 0.6]);
         check("written as a chord", chords.chordTags, 2);
 
+        // The case that went wrong on the live site: a chord written after
+        // other notes must be a new chord, not merged into the note before it.
+        const afterNotes = await page.evaluate(`
+            const editor = window.sheetMusic.editor;
+            editor.stacking = false;
+            editor.clear();
+            const key = (n) => [...document.querySelectorAll(".key")]
+                .find((k) => k.getAttribute("aria-label") === n);
+            const length = (name) => [...document.querySelectorAll(".length")]
+                .find((b) => b.getAttribute("aria-label") === name);
+            const action = (t) => [...document.querySelectorAll(".editor-actions button")]
+                .find((b) => b.textContent === t);
+
+            length("eighth note").click();
+            length("Triplet").click();
+            for (const n of ["C4", "E4", "G4"]) key(n).click();
+            length("Triplet").click();
+            length("half note").click();
+            action("Stack").click();
+            for (const n of ["C4", "E4", "G4"]) key(n).click();
+            action("Stack").click();
+            await new Promise((r) => setTimeout(r, 500));
+            const out = {
+                chips: [...document.querySelectorAll(".chip")].map((c) => c.textContent),
+                durations: window.sheetMusic.timeline.notes.map((n) => Math.round(n.duration * 100) / 100),
+            };
+            editor.clear();
+            return out;
+        `);
+        check("a chord after other notes is a new note", afterNotes.chips, ["C4³", "E4³", "G4³", "C4·E4·G4"]);
+        check("at the length chosen for it", afterNotes.durations, [0.2, 0.2, 0.2, 1.2, 1.2, 1.2]);
+
         // --- writing drums ---------------------------------------------------
         console.log("\nwriting drums");
         const kitWriting = await page.evaluate(`

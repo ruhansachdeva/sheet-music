@@ -87,6 +87,9 @@ export class Editor {
         // Must start as a real boolean: classList.toggle(name, undefined)
         // toggles rather than forcing off, which drew Stack as switched on.
         this.stacking = false;
+        // True from turning Stack on until the chord's first note is written:
+        // that note starts a new chord, and only later taps join it.
+        this.stackFresh = false;
         // The note being edited, by index, or null when adding at the end.
         this.selected = null;
         this.history = [];
@@ -160,6 +163,7 @@ export class Editor {
             spell: { [midi]: prefer },
             ...this.length(),
         });
+        this.stackFresh = false;
         this.changed();
     }
 
@@ -207,8 +211,7 @@ export class Editor {
                 return true;
             case "s":
             case "S":
-                this.stacking = !this.stacking;
-                this.render();
+                this.toggleStack();
                 return true;
             case "Backspace":
             case "Delete":
@@ -243,6 +246,13 @@ export class Editor {
             dots: this.dotted ? 1 : 0,
             ...(this.triplet ? { tuplet: 3 } : {}),
         };
+    }
+
+    /** Turns chord building on or off. On, the next note starts a new chord. */
+    toggleStack() {
+        this.stacking = !this.stacking;
+        this.stackFresh = this.stacking;
+        this.render();
     }
 
     /** Toggles triplets; with a note selected, on that note. */
@@ -342,7 +352,9 @@ export class Editor {
      * which is what makes a chord. Returns whether it was taken.
      */
     joinToLast(field, value, prefer) {
-        if (!this.stacking) return false;
+        // The first tap after pressing Stack begins a new chord rather than
+        // joining whatever happened to come before it.
+        if (!this.stacking || this.stackFresh) return false;
 
         const last = this.score.notes.at(-1);
         if (!last || last.rest || !last[field]) return false;
@@ -366,6 +378,7 @@ export class Editor {
             drums: [gm],
             ...this.length(),
         });
+        this.stackFresh = false;
         this.changed();
     }
 
@@ -606,10 +619,7 @@ export class Editor {
         stack.title = "Add the next note to the one before it";
         stack.setAttribute("aria-pressed", String(Boolean(this.stacking)));
         stack.classList.toggle("chosen", Boolean(this.stacking));
-        stack.addEventListener("click", () => {
-            this.stacking = !this.stacking;
-            this.render();
-        });
+        stack.addEventListener("click", () => this.toggleStack());
 
         const rest = el("button", null, "Rest");
         rest.addEventListener("click", () => this.addRest());
