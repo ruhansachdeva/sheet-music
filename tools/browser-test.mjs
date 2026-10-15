@@ -656,6 +656,49 @@ async function run() {
         check("double bass sounds an octave lower", transposed.doubleBass, 60);
         check("a MIDI file is never transposed", transposed.midiFile, 72);
 
+        // A part whose MusicXML says how it transposes plays at that, whatever
+        // is picked: a clarinet part on the piano sound, a horn part a fifth down.
+        const declared = await page.evaluate(`
+            const { concertPitch } = await import("./js/instruments.js");
+            const part = (transpose) => '<?xml version="1.0"?><score-partwise version="3.1"><part-list>' +
+                '<score-part id="P1"><part-name>P</part-name></score-part></part-list><part id="P1"><measure number="1">' +
+                '<attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time>' +
+                '<clef><sign>G</sign><line>2</line></clef>' + transpose + '</attributes>' +
+                '<note><pitch><step>D</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>whole</type></note>' +
+                '</measure></part></score-partwise>';
+            // Through the file picker once, for what the page says about it.
+            const input = document.getElementById("file");
+            const files = new DataTransfer();
+            files.items.add(new File([part("<transpose><diatonic>-1</diatonic><chromatic>-2</chromatic></transpose>")],
+                "clarinet-part.musicxml", { type: "application/xml" }));
+            input.files = files.files;
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+            for (let i = 0; i < 50 && !/clarinet-part/.test(document.getElementById("piece-name").textContent); i++) {
+                await new Promise((r) => setTimeout(r, 100));
+            }
+            const said = document.getElementById("status").textContent;
+            const clarinetPart = await window.sheetMusic.score.load(
+                part("<transpose><diatonic>-1</diatonic><chromatic>-2</chromatic></transpose>"));
+            const hornPart = await window.sheetMusic.score.load(
+                part("<transpose><diatonic>-4</diatonic><chromatic>-7</chromatic></transpose>"));
+            const plain = await window.sheetMusic.score.load(part(""));
+            const sound = (t, key) => concertPitch(t.notes[0].midi, key, true, t.notes[0].transpose);
+            return {
+                clarinetOnPiano: sound(clarinetPart, "piano"),
+                clarinetOnClarinet: sound(clarinetPart, "clarinet"),
+                hornOnPiano: sound(hornPart, "piano"),
+                plainOnClarinet: sound(plain, "clarinet"),
+                transposedBy: [clarinetPart.transposedBy, hornPart.transposedBy, plain.transposedBy],
+                said,
+            };
+        `);
+        check("a clarinet part sounds a tone down, even on the piano sound", declared.clarinetOnPiano, 60);
+        check("and not twice over on the clarinet sound", declared.clarinetOnClarinet, 60);
+        check("a horn part sounds a fifth down", declared.hornOnPiano, 55);
+        check("a part that says nothing follows the picker", declared.plainOnClarinet, 60);
+        check("the timeline knows what the score says", declared.transposedBy, [-2, -7, null]);
+        check("and the page says so", /sounds 2 semitones lower than written/.test(declared.said), true);
+
         console.log("\ndrum mapping");
         const kit = await page.evaluate(`
             const { resolveDrumName, gmKeyFromStaffPosition } = await import("./js/drums.js");
