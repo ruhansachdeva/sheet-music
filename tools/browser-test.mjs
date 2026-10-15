@@ -559,6 +559,52 @@ async function run() {
         check("Done closes the writer", edited.closed, true);
         check("and it can be reopened", edited.canReopen, true);
 
+        // --- on a phone the writer docks, and you can see what you write -----
+        console.log("\nwriting on a phone");
+        await page.evaluate(`document.querySelector(".editor-head .primary")?.click();`);
+        await page.send("Emulation.setDeviceMetricsOverride", {
+            width: 390, height: 844, deviceScaleFactor: 2, mobile: true,
+        });
+        const phone = await page.evaluate(`
+            document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 300));
+            window.sheetMusic.editor.clear();
+            document.querySelectorAll(".length")[2].click();
+            const key = (n) => [...document.querySelectorAll(".key")]
+                .find((k) => k.getAttribute("aria-label") === n);
+            for (const n of ["C4","D4","E4","F4","G4","A4","B4","A4","G4","F4","E4","D4","C4","E4","G4","E4"]) {
+                key(n).click();
+                await new Promise((r) => setTimeout(r, 60));
+            }
+            await new Promise((r) => setTimeout(r, 1200));
+
+            const sheet = document.getElementById("editor").getBoundingClientRect();
+            const score = document.querySelector("#score svg").getBoundingClientRect();
+            const settings = document.querySelector(".editor-more");
+            const writing = {
+                docked: getComputedStyle(document.getElementById("editor")).position,
+                newestInView: score.bottom <= sheet.top + 4 && score.bottom > 0,
+                transportHidden: getComputedStyle(document.getElementById("controls")).display === "none",
+                settingsFolded: !settings.open,
+                summary: settings.querySelector("summary").textContent,
+            };
+            document.querySelector(".editor-head .primary").click();
+            await new Promise((r) => setTimeout(r, 150));
+            writing.transportBackAfterDone =
+                getComputedStyle(document.getElementById("controls")).display !== "none";
+            window.sheetMusic.editor.clear();
+            return writing;
+        `);
+        await page.send("Emulation.clearDeviceMetricsOverride");
+        check("the writer docks to the bottom", phone.docked, "fixed");
+        check("and the newest notes stay in view above it", phone.newestInView, true);
+        check("the transport bar steps aside while writing", phone.transportHidden, true);
+        check("and comes back after Done", phone.transportBackAfterDone, true);
+        check("settings start folded on a phone", phone.settingsFolded, true);
+        check("behind a summary of what they are", phone.summary, "4/4 · ♩ 100 · C major · treble");
+        await page.evaluate(`document.getElementById("write-music").click();`);
+        await new Promise((r) => setTimeout(r, 300));
+
         // --- the key pressed is the note written -----------------------------
         console.log("\nspelling and key signatures");
         const spelling = await page.evaluate(`

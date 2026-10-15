@@ -59,12 +59,15 @@ const TIME_SIGNATURES = [
 ];
 
 export class Editor {
-    constructor(container, { onChange, onClose, onPreview, onPreviewDrum }) {
+    constructor(container, { onChange, onClose, onPreview, onPreviewDrum, onPlay }) {
         this.container = container;
         this.onChange = onChange;
         this.onClose = onClose;
         this.onPreview = onPreview;
         this.onPreviewDrum = onPreviewDrum;
+        this.onPlay = onPlay;
+        this.playing = false;
+        this.settingsOpen = true;
         this.score = emptyScore();
         this.octave = 4;
         this.duration = "quarter";
@@ -92,6 +95,11 @@ export class Editor {
     }
 
     open(score, kind = "pitched") {
+        // Settings are chosen once, so on a phone they start folded away. This
+        // is decided on each open rather than at load, since the window may
+        // have been turned or resized since; within one session your choice
+        // to open or fold them sticks.
+        this.settingsOpen = window.matchMedia?.("(min-width: 700px)").matches ?? true;
         this.score = score ? structuredClone(score) : emptyScore(kind);
         this.history = [];
         this.render();
@@ -111,6 +119,7 @@ export class Editor {
 
     changed() {
         this.refreshCount();
+        if (this.summaryEl) this.summaryEl.textContent = this.summaryText();
         this.onChange?.(this.score);
     }
 
@@ -203,8 +212,22 @@ export class Editor {
         );
     }
 
+    /** The app tells the writer when playback starts and stops. */
+    setPlaying(playing) {
+        this.playing = playing;
+        if (this.playButton) {
+            this.playButton.textContent = playing ? "Pause" : "Play";
+            this.playButton.classList.toggle("playing", playing);
+        }
+    }
+
     renderHeader() {
         const header = el("div", "editor-head");
+
+        // On a phone the transport bar is behind the writer, so it plays from here.
+        const play = el("button", "editor-play", this.playing ? "Pause" : "Play");
+        play.addEventListener("click", () => this.onPlay?.());
+        this.playButton = play;
 
         const title = el("input", "editor-title");
         title.type = "text";
@@ -218,11 +241,37 @@ export class Editor {
         const done = el("button", "primary", "Done");
         done.addEventListener("click", () => this.close());
 
-        header.append(title, done);
+        header.append(play, title, done);
         return header;
     }
 
     renderSettings() {
+        const fold = el("details", "editor-more");
+        fold.open = this.settingsOpen;
+        fold.addEventListener("toggle", () => {
+            this.settingsOpen = fold.open;
+        });
+
+        this.summaryEl = el("summary", null, this.summaryText());
+        fold.appendChild(this.summaryEl);
+        fold.appendChild(this.renderSettingsRow());
+        return fold;
+    }
+
+    /** What the folded settings are set to, e.g. "4/4 · ♩ 100 · D major · treble". */
+    summaryText() {
+        const key = KEY_SIGNATURES.find((k) => k.fifths === this.score.fifths);
+        return [
+            `${this.score.beats}/${this.score.beatType}`,
+            `♩ ${this.score.tempo}`,
+            this.score.kind === "drums" ? "drum kit" : `${key?.name ?? "C"} major`,
+            this.score.kind === "drums" ? null : this.score.clef,
+        ]
+            .filter(Boolean)
+            .join(" · ");
+    }
+
+    renderSettingsRow() {
         const row = el("div", "editor-settings");
 
         const time = el("select");

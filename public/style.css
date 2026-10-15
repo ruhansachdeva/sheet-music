@@ -1049,3 +1049,79 @@ body.dropping #setup {
     border-color: var(--accent);
     color: var(--accent-ink);
 }
+
+/* --- writing on a phone: the writer docks like a keyboard --------------- */
+
+.editor-head {
+    align-items: center;
+}
+
+.editor-play {
+    flex: 0 0 auto;
+    min-width: 72px;
+}
+
+.editor-play.playing {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+}
+
+.editor-more > summary {
+    font-size: var(--text-sm);
+    color: var(--ink-soft);
+    cursor: pointer;
+    min-height: var(--tap);
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    list-style: none;
+}
+
+.editor-more > summary::-webkit-details-marker {
+    display: none;
+}
+
+.editor-more > summary::before {
+    content: "▸";
+    color: var(--muted);
+    transition: transform 0.15s ease;
+}
+
+.editor-more[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.editor-more .editor-settings {
+    padding-top: var(--s2);
+}
+
+@media (max-width: 699px) {
+    body.writing .editor:not([hidden]) {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 30;
+        margin: 0;
+        max-height: 72vh;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        gap: var(--s3);
+        padding: var(--s3) var(--s4);
+        padding-bottom: max(var(--s3), env(safe-area-inset-bottom));
+        border-radius: var(--radius) var(--radius) 0 0;
+        border-bottom: none;
+        box-shadow: var(--shadow-up);
+    }
+
+    /* The sheet plays from its own button, so the bar behind it goes. */
+    body.writing #controls {
+        display: none;
+    }
+
+    /* Room to scroll the end of the score clear of the sheet. */
+    body.writing {
+        padding-bottom: calc(var(--sheet-height, 360px) + var(--s4));
+    }
+}
