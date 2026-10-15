@@ -927,14 +927,6 @@ body.dropping #setup {
     padding: 0 var(--s3);
 }
 
-.editor-count {
-    margin-left: auto;
-    white-space: nowrap;
-    font-size: var(--text-sm);
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
-}
-
 /* A keyboard you can hit with a thumb, rather than aiming at a staff line. */
 .keyboard {
     display: grid;
@@ -1234,4 +1226,18 @@ button.danger {
     font-size: var(--text-lg);
     font-style: italic;
     font-family: var(--font-display);
+}
+
+/* What a tap does right now. In chord mode it takes the accent colour, so
+   the mode cannot be missed. */
+.editor-mode {
+    margin: 0;
+    font-size: var(--text-sm);
+    line-height: 1.4;
+    color: var(--muted);
+}
+
+.editor-mode.chord {
+    color: var(--accent);
+    font-weight: 600;
 }
