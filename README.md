@@ -52,16 +52,20 @@ Two providers are built in, and the app uses whichever key you set:
 
 Set both and Gemini wins; `PROVIDER=claude` in `.env` forces the other.
 
-Gemini's free tier shares capacity, so a model is sometimes too busy to answer.
-The provider handles that itself: it retries with backoff, then falls through
-from `gemini-flash-latest` to `gemini-flash-lite-latest`. Three optional
-overrides, none of them usually needed:
+Gemini's free tier shares capacity, so a model is sometimes too busy to answer,
+often for minutes at a time. The provider handles that itself: it keeps asking
+`gemini-flash-latest` for up to five minutes, as often as Google allows, and
+only then falls through to `gemini-flash-lite-latest`. Flash-Lite reads
+notation noticeably worse, so when it does the reading, the page says so.
+Optional overrides, none of them usually needed:
 
 | Variable | Default | Why you might change it |
 | --- | --- | --- |
 | `GEMINI_MODEL` | the two above, in order | Pin one model. The error message lists what your key can reach. |
 | `GEMINI_THINKING` | `medium` | Thinking tokens come out of the output budget - at `high` the model can spend the lot thinking and return nothing. |
 | `GEMINI_MAX_OUTPUT_TOKENS` | `32768` | Raise it for very dense pages. |
+| `GEMINI_BUSY_PATIENCE_MS` | `300000` | How long to wait for a busy model before trying the lighter one. |
+| `GEMINI_API_BASE` | Google's v1beta endpoint | Send requests through a proxy. |
 
 ## Testing each feature
 
@@ -178,6 +182,7 @@ npm run check            # every measure in samples/ adds up to its time signatu
 npm test                 # drives the app in headless Chrome
 npm run test:audio       # also plays, and watches the audio clock and cursor
 npm run test:editor      # the note writer's model and MusicXML output
+npm run test:provider    # how a busy Gemini is handled, against a local fake
 npm run test:transcribe  # end to end through the model - needs a key
 npm run test:accuracy    # how accurately a page is read back - needs a key
 ```

@@ -542,6 +542,17 @@ async function transcribe(original) {
         : `Read by ${readerName}`;
     offerDownload(result.title);
     questionPanel.show(result.questions);
+    warnIfLighter(result);
+}
+
+/** A lighter model misreads more, so its reading is worth checking by eye. */
+function warnIfLighter(result) {
+    if (!result.fallback) return;
+    setStatus(
+        `${readerName}'s usual model was too busy, so a lighter one read this, and it ` +
+            "misreads more often. Check it against the page, or try again later.",
+        "info",
+    );
 }
 
 /** Sends my answers back, so the reader can correct the MusicXML. */
@@ -562,6 +573,7 @@ async function sendAnswers(answers) {
         ui.pieceName.textContent = `${result.title} — corrected`;
         offerDownload(result.title);
         questionPanel.show(result.questions);
+        warnIfLighter(result);
     } catch (error) {
         setStatus(`Could not apply the answers: ${error.message}`, "error");
     } finally {

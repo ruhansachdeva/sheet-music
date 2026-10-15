@@ -40,6 +40,9 @@ jobs:
       - name: Check the note writer
         run: npm run test:editor
 
+      - name: Check how a busy reader is handled
+        run: npm run test:provider
+
       - name: Assemble the site
         run: |
           mkdir -p site
