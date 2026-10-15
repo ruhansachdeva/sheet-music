@@ -44,9 +44,22 @@ function findChrome() {
 const twinkle = readFileSync(join(ROOT, "samples/twinkle.musicxml"), "utf8");
 const timing = readFileSync(join(ROOT, "samples/timing-test.musicxml"), "utf8");
 const asked = [];
+// What the stand-in does: read normally, or fail the way Gemini can.
+let behaviour = "read";
 const reader = createServer(async (request, response) => {
     let body = "";
     for await (const chunk of request) body += chunk;
+    if (behaviour === "daily limit") {
+        response.writeHead(429, { "content-type": "application/json", "retry-after": "46755" });
+        response.end(JSON.stringify({ error: { message: "Rate limit exceeded (limit: 20 requests per day on Free Tier)." } }));
+        return;
+    }
+    if (behaviour === "not music") {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ status: "completed", steps: [{ type: "model_output", content: [{ type: "text",
+            text: JSON.stringify({ title: "A cat", musicxml: "This photo shows a cat, not sheet music.", questions: [] }) }] }] }));
+        return;
+    }
     const { input = [] } = JSON.parse(body || "{}");
     const text = input.find((item) => item.type === "text")?.text ?? "";
     const refining = text.includes("My answers:");
@@ -209,7 +222,43 @@ try {
 
     check("the reader got the photo both times", asked.map((a) => a.withImage), [true, true]);
     check("and the answer chosen", asked.map((a) => a.answer), [null, "Tie"]);
-    check("no errors in the page", errors, []);
+
+    // When a read fails, the page says why, unlocks, and keeps what it had.
+    console.log("\nwhen a read fails");
+    const failedRead = async () => evaluate(`
+        const canvas = document.createElement("canvas");
+        canvas.width = 50;
+        canvas.height = 50;
+        const png = await new Promise((r) => canvas.toBlob(r, "image/png"));
+        const input = document.getElementById("file");
+        const files = new DataTransfer();
+        files.items.add(new File([png], "page.png", { type: "image/png" }));
+        input.files = files.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        const status = document.getElementById("status");
+        for (let i = 0; i < 50 && !status.classList.contains("error"); i++) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        return {
+            said: status.textContent,
+            unlocked: !document.getElementById("choose-file").disabled,
+            stillShowing: document.getElementById("piece-name").textContent,
+        };
+    `);
+    behaviour = "daily limit";
+    const limited = await failedRead();
+    check("out of daily readings, it says when they come back",
+        /used up.*midnight Pacific, in about 13 hours/.test(limited.said), true);
+    check("unlocks the uploads", limited.unlocked, true);
+    check("and keeps the score that was showing", limited.stillShowing, "Twinkle — corrected");
+    behaviour = "not music";
+    const notMusic = await failedRead();
+    check("a photo that is not music is said to be so", /not.*sheet music/i.test(notMusic.said), true);
+    check("and unlocks the uploads", notMusic.unlocked, true);
+    behaviour = "read";
+    // The two failed reads log their reason, as intended; nothing else may.
+    check("no other errors in the page",
+        errors.filter((e) => !/used up|not return a MusicXML|not.*sheet music/i.test(e)), []);
 } finally {
     browser.kill("SIGKILL");
     server.kill();
