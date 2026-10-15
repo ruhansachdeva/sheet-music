@@ -1,6 +1,6 @@
-// The clarifying-question panel: Claude's questions about a photo or PDF, with
+// The clarifying-question panel: the reader's questions about a photo or PDF, with
 // one button per suggested answer, a free-text box, and a skip. Answers go back
-// to /api/refine; skipped questions keep Claude's best guess.
+// to /api/refine; skipped questions keep the reader's best guess.
 
 export class QuestionPanel {
     constructor(container, { onSubmit }) {

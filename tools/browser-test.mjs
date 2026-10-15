@@ -662,6 +662,64 @@ async function run() {
             document.getElementById("instrument").dispatchEvent(new Event("change"));
         `);
 
+        // --- photos are prepared on the device before upload ----------------
+        console.log("\npreparing a photo");
+        const photo = await page.evaluate(`
+            const { preparePhoto, MAX_EDGE } = await import("./js/photo.js");
+
+            // A camera-sized frame: wide, with the left half dark so we can tell
+            // which way up it came out.
+            const make = (w, h, type) => new Promise((resolve) => {
+                const c = document.createElement("canvas");
+                c.width = w; c.height = h;
+                const g = c.getContext("2d");
+                g.fillStyle = "#fff"; g.fillRect(0, 0, w, h);
+                g.fillStyle = "#000"; g.fillRect(0, 0, w / 2, h);
+                c.toBlob(resolve, type, 0.9);
+            });
+            const size = async (file) => {
+                const b = await createImageBitmap(file);
+                return [b.width, b.height];
+            };
+
+            // 1. A full-size phone photo comes down to MAX_EDGE.
+            const big = new File([await make(4032, 3024, "image/jpeg")], "IMG_0001.jpg", { type: "image/jpeg" });
+            const prepared = await preparePhoto(big);
+
+            // 2. The same frame with an EXIF flag saying "turn 90 degrees
+            //    clockwise", as a phone held upright writes it. Orientation 6.
+            const jpeg = new Uint8Array(await (await make(400, 200, "image/jpeg")).arrayBuffer());
+            const exif = [0xFF,0xE1,0x00,0x22, 0x45,0x78,0x69,0x66,0x00,0x00,
+                0x49,0x49,0x2A,0x00,0x08,0x00,0x00,0x00, 0x01,0x00,
+                0x12,0x01,0x03,0x00,0x01,0x00,0x00,0x00,0x06,0x00,0x00,0x00, 0x00,0x00,0x00,0x00];
+            const rotated = new Uint8Array(jpeg.length + exif.length);
+            rotated.set(jpeg.slice(0, 2));          // SOI
+            rotated.set(exif, 2);                   // APP1 / Exif
+            rotated.set(jpeg.slice(2), 2 + exif.length);
+            const sideways = new File([rotated], "IMG_0002.jpg", { type: "image/jpeg" });
+            const upright = await preparePhoto(sideways);
+
+            // 3. A PDF is left alone.
+            const pdf = new File(["%PDF-1.4"], "page.pdf", { type: "application/pdf" });
+
+            return {
+                bigIn: await size(big),
+                bigOut: await size(prepared),
+                bigType: prepared.type,
+                shrunk: prepared.size < big.size,
+                maxEdge: MAX_EDGE,
+                sidewaysOut: await size(upright),
+                pdfUntouched: (await preparePhoto(pdf)) === pdf,
+            };
+        `);
+        check("a phone-sized photo is scaled to the long edge", Math.max(...photo.bigOut), photo.maxEdge);
+        check("keeping its shape", photo.bigOut[0] / photo.bigOut[1], 4032 / 3024, 0.01);
+        check("as a JPEG", photo.bigType, "image/jpeg");
+        check("and smaller to send", photo.shrunk, true);
+        // 400 x 200 with "rotate 90" applied comes out 200 x 400.
+        check("a sideways photo is turned upright", photo.sidewaysOut, [200, 400]);
+        check("a PDF is left alone", photo.pdfUntouched, true);
+
         // --- the clarifying question panel ----------------------------------
         console.log("\nclarifying questions");
         const asked = await page.evaluate(`
