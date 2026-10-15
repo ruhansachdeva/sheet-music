@@ -563,11 +563,25 @@ html:has(body.has-transport) {
     stroke-width: 0.5;
 }
 
+.roll-frame {
+    display: grid;
+    grid-template-columns: 2.25rem 1fr;
+}
+
+/* The octave labels, in a column of their own as real text. The roll is
+   white paper in either theme, so they keep the light theme's grey. */
+.roll-labels {
+    position: relative;
+}
+
 .roll-label {
-    fill: var(--muted);
-    font-size: 7px;
-    font-family: system-ui, sans-serif;
-    text-anchor: end;
+    position: absolute;
+    right: var(--s2);
+    transform: translateY(-50%);
+    font-size: var(--text-xs);
+    line-height: 1;
+    color: #716a64;
+    font-variant-numeric: tabular-nums;
 }
 
 .roll-note {

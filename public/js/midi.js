@@ -6,9 +6,12 @@ import { Midi } from "https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/+esm";
 
 const MIDI_DEFAULT_BPM = 120;
 
-/** Roll geometry, in the SVG's own units. */
+/**
+ * Roll geometry, in the SVG's own units. The SVG is stretched to fit, so the
+ * octave labels are HTML beside it rather than SVG text, which would be
+ * stretched - squashed to a few pixels on a phone.
+ */
 const WIDTH = 1000;
-const GUTTER = 40; // room on the left for the octave labels
 const ROW = 8;
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -46,6 +49,12 @@ export class PianoRoll {
         this.high = high;
         const height = rows * ROW;
 
+        const frame = document.createElement("div");
+        frame.className = "roll-frame";
+        const labels = document.createElement("div");
+        labels.className = "roll-labels";
+        labels.setAttribute("aria-hidden", "true");
+
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.setAttribute("class", "piano-roll");
         svg.setAttribute("viewBox", `0 0 ${WIDTH} ${height}`);
@@ -67,22 +76,17 @@ export class PianoRoll {
 
             // A faint stripe behind every black key, so the pitches stay readable.
             if (BLACK_KEYS.includes(pitchClass)) {
-                add("rect", { x: GUTTER, y, width: WIDTH - GUTTER, height: ROW, class: "roll-row" });
+                add("rect", { x: 0, y, width: WIDTH, height: ROW, class: "roll-row" });
             }
             // Label each C, and draw its line, so the pitches can be read off.
             if (pitchClass === 0) {
-                add("line", {
-                    x1: GUTTER,
-                    x2: WIDTH,
-                    y1: y + ROW,
-                    y2: y + ROW,
-                    class: "roll-octave",
-                });
-                add(
-                    "text",
-                    { x: GUTTER - 6, y: y + ROW - 1.5, class: "roll-label" },
-                    `${NOTE_NAMES[pitchClass]}${Math.floor(midi / 12) - 1}`,
-                );
+                add("line", { x1: 0, x2: WIDTH, y1: y + ROW, y2: y + ROW, class: "roll-octave" });
+                const label = document.createElement("span");
+                label.className = "roll-label";
+                // Centred on the C's row, as a share of the roll's height.
+                label.style.top = `${((y + ROW / 2) / height) * 100}%`;
+                label.textContent = `${NOTE_NAMES[pitchClass]}${Math.floor(midi / 12) - 1}`;
+                labels.appendChild(label);
             }
         }
 
@@ -106,20 +110,15 @@ export class PianoRoll {
             this.noteElements.push({ element: rect, note });
         }
 
-        this.playhead = add("line", {
-            x1: GUTTER,
-            x2: GUTTER,
-            y1: 0,
-            y2: height,
-            class: "roll-playhead",
-        });
+        this.playhead = add("line", { x1: 0, x2: 0, y1: 0, y2: height, class: "roll-playhead" });
 
-        this.container.appendChild(svg);
+        frame.append(labels, svg);
+        this.container.appendChild(frame);
     }
 
     /** Time in reference seconds to an x position in the roll. */
     xFor(time) {
-        return GUTTER + (Math.max(time, 0) / this.duration) * (WIDTH - GUTTER);
+        return (Math.max(time, 0) / this.duration) * WIDTH;
     }
 
     /** Lights up whatever is sounding at `time` (in reference seconds). */
