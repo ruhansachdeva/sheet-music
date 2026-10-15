@@ -1184,3 +1184,10 @@ button.danger {
         display: none;
     }
 }
+
+.length.triplet {
+    font-weight: 700;
+    font-size: var(--text-lg);
+    font-style: italic;
+    font-family: var(--font-display);
+}

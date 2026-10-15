@@ -125,6 +125,10 @@ replaces its pitch, a note value changes its length, **Rest** turns it into a
 rest, and **Delete** removes it. **Done editing** goes back to adding at the
 end.
 
+**Triplets** — press **3** beside the dot, and the notes you write are triplets
+of the chosen value: three in the time of two, drawn under a bracket. Press it
+again to go back. It works on a selected note too, and `3` on a keyboard.
+
 **Chords** — press **Stack**, then tap the notes that belong together: each one
 joins the note before it rather than following it. Press it again to go back to
 writing one note at a time. It works on the kit too, for a kick and a hi-hat on
