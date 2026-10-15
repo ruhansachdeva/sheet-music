@@ -10,7 +10,7 @@
 
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -369,6 +369,125 @@ async function run() {
             await page.evaluate("return document.querySelectorAll('.roll-note').length"),
             32,
         );
+
+        // A MIDI file with no tempo event plays at the standard's 120 BPM, and
+        // one at 62.5 BPM is not rounded: the slider has to match the sound.
+        const midiTempo = async (bpm) => page.evaluate(`
+            const { Midi } = await import("https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/+esm");
+            const midi = new Midi();
+            ${bpm ? `midi.header.setTempo(${bpm});` : ""}
+            const track = midi.addTrack();
+            track.addNote({ midi: 60, ticks: 0, durationTicks: midi.header.ppq });
+            track.addNote({ midi: 62, ticks: midi.header.ppq, durationTicks: midi.header.ppq });
+            const input = document.getElementById("file");
+            const files = new DataTransfer();
+            files.items.add(new File([midi.toArray()], "tempo-${bpm ?? "none"}.mid", { type: "audio/midi" }));
+            input.files = files.files;
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+            for (let i = 0; i < 50 && !/tempo-${bpm ?? "none"}/.test(document.getElementById("piece-name").textContent); i++) {
+                await new Promise((r) => setTimeout(r, 100));
+            }
+            const t = window.sheetMusic.timeline;
+            return {
+                quarterSeconds: Math.round((t.notes[1].time - t.notes[0].time) * 1000) / 1000,
+                slider: document.getElementById("tempo-value").textContent,
+            };
+        `);
+        check("a MIDI file with no tempo plays at 120", await midiTempo(null), { quarterSeconds: 0.5, slider: "120 BPM" });
+        check("and one at 62.5 says 62.5", await midiTempo(62.5), { quarterSeconds: 0.96, slider: "62.5 BPM" });
+
+        // --- tempo marks, however a score writes them ------------------------
+        // MusicXML's <sound tempo> is quarter notes a minute; a printed mark
+        // can be in any note value. Each case is timed from the timeline: the
+        // quarter-note BPM each bar plays at.
+        console.log("\ntempo marks");
+        const tempoNote = (type, dur) =>
+            `<note><pitch><step>C</step><octave>5</octave></pitch><duration>${dur}</duration><voice>1</voice><type>${type}</type></note>`;
+        const quarters = (n) => tempoNote("quarter", 480).repeat(n);
+        const mark = (unit, perMinute, dots = 0) =>
+            `<direction placement="above"><direction-type><metronome><beat-unit>${unit}</beat-unit>` +
+            `${"<beat-unit-dot/>".repeat(dots)}<per-minute>${perMinute}</per-minute></metronome></direction-type></direction>`;
+        const sound = (bpm) => `<direction><direction-type><words/></direction-type><sound tempo="${bpm}"/></direction>`;
+        const tempoScore = (beats, beatType, bars, parts = 1) => {
+            const part = (p) => `<part id="P${p}">` + bars.map((content, i) =>
+                `<measure number="${i + 1}">` +
+                (i === 0 ? `<attributes><divisions>480</divisions><time><beats>${beats}</beats><beat-type>${beatType}</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>` : "") +
+                (typeof content === "function" ? content(p) : content) + "</measure>").join("") + "</part>";
+            const ids = Array.from({ length: parts }, (_, i) => i + 1);
+            return `<?xml version="1.0"?><score-partwise version="3.1"><part-list>${ids.map((p) =>
+                `<score-part id="P${p}"><part-name>P${p}</part-name></score-part>`).join("")}</part-list>${ids.map(part).join("")}</score-partwise>`;
+        };
+        // Quarter-note BPM per bar, from the gap between its first two onsets
+        // (in a score of several parts, notes in different parts coincide).
+        const playedAt = (xml) => page.evaluate(`
+            const t = await window.sheetMusic.score.load(${JSON.stringify(xml)});
+            const bars = [...new Set(t.steps.map((s) => s.measure))];
+            return {
+                bpm: t.bpm,
+                bars: bars.map((bar) => {
+                    const onsets = [...new Set(t.notes
+                        .filter((n) => t.steps[n.step]?.measure === bar).map((n) => n.time))];
+                    return Math.round(600 / (onsets[1] - onsets[0])) / 10;
+                }),
+            };
+        `);
+        const tempoCases = [
+            ["quarter = 120 with <sound>", tempoScore(4, 4, [mark("quarter", 120).replace("</direction>", '<sound tempo="120"/></direction>') + quarters(4), quarters(4)]), [120, 120]],
+            ["eighth = 120 is 60 quarters a minute", tempoScore(4, 4, [mark("eighth", 120) + quarters(4), quarters(4)]), [60, 60]],
+            ["half = 60 is 120", tempoScore(2, 2, [mark("half", 60) + quarters(4), quarters(4)]), [120, 120]],
+            ["dotted quarter = 60 is 90", tempoScore(6, 8, [mark("quarter", 60, 1) + quarters(3), quarters(3)]), [90, 90]],
+            ["dotted half = 40 is 120", tempoScore(3, 4, [mark("half", 40, 1) + quarters(3), quarters(3)]), [120, 120]],
+            ["<sound> wins over the printed mark", tempoScore(4, 4, [mark("half", 30).replace("</direction>", '<sound tempo="72"/></direction>') + quarters(4), quarters(4)]), [72, 72]],
+            ["dotted quarter = 60 copied as <sound> 60 is still 90", tempoScore(6, 8, [mark("quarter", 60, 1).replace("</direction>", '<sound tempo="60"/></direction>') + quarters(3), quarters(3)]), [90, 90]],
+            ["a fractional tempo is not rounded", tempoScore(4, 4, [sound(62.5) + quarters(4), quarters(4)]), [62.5, 62.5]],
+            ["a change at a barline", tempoScore(4, 4, [sound(60) + quarters(4), sound(120) + quarters(4)]), [60, 120]],
+            ["a mark in the second part only", tempoScore(4, 4, [(p) => (p === 2 ? mark("half", 45) : "") + quarters(4), quarters(4)], 2), [90, 90]],
+            ["no mark at all", tempoScore(4, 4, [quarters(4), quarters(4)]), [100, 100]],
+        ];
+        for (const [label, xml, expected] of tempoCases) {
+            check(label, (await playedAt(xml)).bars, expected);
+        }
+
+        // A change in the middle of a bar: the notes and the clicks both follow.
+        const midBar = await page.evaluate(`
+            const t = await window.sheetMusic.score.load(${JSON.stringify(
+                tempoScore(4, 4, [sound(60) + quarters(2) + sound(120) + quarters(2), quarters(4)]),
+            )});
+            return {
+                onsets: t.notes.slice(0, 5).map((n) => Math.round(n.time * 100) / 100),
+                clicks: t.beats.slice(0, 5).map((b) => Math.round(b.time * 100) / 100),
+            };
+        `);
+        check("a change mid-bar moves the notes after it", midBar.onsets, [0, 1, 2, 2.5, 3]);
+        check("and the clicks with them", midBar.clicks, [0, 1, 2, 2.5, 3]);
+
+        // A compressed .mxl file, through the file picker: unzipped to text,
+        // so its printed half-note mark is read right and Download has it.
+        const mxl = await page.evaluate(`
+            const bytes = Uint8Array.from(atob(${JSON.stringify(
+                readFileSync(join(ROOT, "tools/fixtures/cut-time.mxl")).toString("base64"),
+            )}), (c) => c.charCodeAt(0));
+            const input = document.getElementById("file");
+            const files = new DataTransfer();
+            files.items.add(new File([bytes], "cut-time.mxl", { type: "application/vnd.recordare.musicxml" }));
+            input.files = files.files;
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+            for (let i = 0; i < 50 && !/Compressed/.test(document.getElementById("piece-name").textContent); i++) {
+                await new Promise((r) => setTimeout(r, 100));
+            }
+            const t = window.sheetMusic.timeline;
+            const download = document.getElementById("download");
+            return {
+                title: document.getElementById("piece-name").textContent,
+                quarterSeconds: Math.round((t.notes[1].time - t.notes[0].time) * 1000) / 1000,
+                slider: document.getElementById("tempo-value").textContent,
+                downloadHasIt: download.hidden ? false : /Compressed Cut Time/.test(await (await fetch(download.href)).text()),
+            };
+        `);
+        check("a .mxl file loads", mxl.title, "Compressed Cut Time");
+        check("at half = 60, so a quarter lasts half a second", mxl.quarterSeconds, 0.5);
+        check("with the slider on 120 BPM", mxl.slider, "120 BPM");
+        check("and Download saves it, not the piece before", mxl.downloadHasIt, true);
 
         // --- rendering ------------------------------------------------------
         console.log("\nrendering");

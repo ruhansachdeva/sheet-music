@@ -4,7 +4,7 @@
 
 import { Midi } from "https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/+esm";
 
-const DEFAULT_BPM = 100;
+const MIDI_DEFAULT_BPM = 120;
 
 /** Roll geometry, in the SVG's own units. */
 const WIDTH = 1000;
@@ -169,14 +169,16 @@ function buildTimeline(midi) {
     }
     notes.sort((a, b) => a.time - b.time);
 
-    const bpm = midi.header.tempos[0]?.bpm
-        ? Math.round(midi.header.tempos[0].bpm)
-        : null;
+    // The opening tempo, exact: the note times above are real seconds at the
+    // file's own tempo, so a rounded figure would put the slider slightly off
+    // it. A file with no tempo event plays at 120 BPM - the MIDI standard's
+    // default, and the tempo those note times were worked out at.
+    const bpm = midi.header.tempos[0]?.bpm ?? MIDI_DEFAULT_BPM;
     const duration = Math.max(midi.duration, ...notes.map((n) => n.time + n.duration), 1);
 
     return {
         scoreBpm: bpm,
-        bpm: bpm || DEFAULT_BPM,
+        bpm,
         notes,
         steps: [], // no notation to step through
         beats: beatGrid(midi),

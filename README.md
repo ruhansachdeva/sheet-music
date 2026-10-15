@@ -101,7 +101,9 @@ eighth-note clicks per bar because the time signature does.
 **Tempo** — the slider starts at the score's own tempo (96 BPM for the timing
 test, 100 if a score has no marking). Drag it while the music plays; it speeds up
 without losing its place, and the metronome follows. *Reset to score tempo* puts
-it back.
+it back. Tempo is always shown in quarter notes a minute, so a piece marked
+"half = 60" shows 120 BPM, and "dotted quarter = 60" in 6/8 shows 90. A MIDI
+file with no tempo of its own plays at the MIDI standard's 120.
 
 **Instruments and transposition** — load *Twinkle* and switch between piano,
 violin and flute: same notes, different sound. Switch to clarinet and the
@@ -242,11 +244,19 @@ tools/               the checks above, and the MIDI sample generator
 ```
 
 **Reading the score.** `score.js` walks the score with OpenSheetMusicDisplay's
-own iterator, which unrolls repeats and follows tempo changes, and records three
-things in one pass: note events, the cursor positions for highlighting, and a
-metronome beat grid. Times are in *reference seconds* - seconds at the score's
-own tempo - so the tempo slider is one multiplier applied at playback, and
-scores that change tempo part-way through still scale correctly. A tied note is
+own iterator, which unrolls repeats, and records three things in one pass: note
+events, the cursor positions for highlighting, and a metronome beat grid. Times
+are in *reference seconds* - seconds at the score's own tempo - so the tempo
+slider is one multiplier applied at playback, and scores that change tempo
+part-way through still scale correctly.
+
+The tempo itself comes from `tempo.js`, which reads it straight from the
+MusicXML rather than from OSMD: OSMD takes a printed "half = 60" as 60 quarter
+notes a minute instead of 120, and rounds 62.5 to 63. `tempo.js` uses
+`<sound tempo>` where a score has it, converts the printed metronome mark where
+it does not, and places each change where it falls in the bar, so the notes and
+the clicks both follow a change mid-bar. A `.mxl` file is unzipped to text
+first, so it goes through the same path. A tied note is
 emitted once at its start note for the whole tied length, so it sounds as one
 held note.
 
@@ -299,8 +309,6 @@ both of them overflowed a small screen.
   instrument can wait a moment.
 - Gemini's free tier is rate limited to a few requests a minute with a daily
   cap, so a long session of reading pages will hit a 429 and have to wait.
-- A tempo change in the middle of a measure moves the notes correctly but leaves
-  that measure's remaining metronome clicks at the old tempo.
 - Drum notation without a `<midi-unpitched>` mapping falls back to reading the
   staff position, using the common drum-notation convention; an unusual drum map
   can land on the wrong kit piece.
