@@ -196,6 +196,7 @@ npm test                 # drives the app in headless Chrome
 npm run test:audio       # also plays, and watches the audio clock and cursor
 npm run test:editor      # the note writer's model and MusicXML output
 npm run test:provider    # how a busy Gemini is handled, against a local fake
+npm run test:read-flow   # photo -> reading -> question -> answer, against a local fake
 npm run test:transcribe  # end to end through the model - needs a key
 npm run test:accuracy    # how accurately a page is read back - needs a key
 ```

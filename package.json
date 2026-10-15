@@ -15,6 +15,7 @@
     "test:editor": "node tools/editor-test.mjs",
     "test:api": "node tools/api-test.mjs",
     "test:provider": "node tools/provider-test.mjs",
+    "test:read-flow": "node tools/read-flow-test.mjs",
     "test:accuracy": "node --env-file-if-exists=.env tools/accuracy-test.mjs"
   },
   "license": "ISC",
