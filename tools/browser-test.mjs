@@ -1627,6 +1627,69 @@ async function run() {
         check("Clear starts a fresh draft", restored.savedAfterClear, 0);
 
         // --- typing notes on a laptop ----------------------------------------
+        // --- the space bar ---------------------------------------------------
+        // Space plays and pauses - except on a button reached with the
+        // keyboard, which it presses, as it does everywhere else on the web.
+        console.log("\nthe space bar");
+        await page.send("Emulation.setDeviceMetricsOverride", {
+            width: 1280, height: 800, deviceScaleFactor: 1, mobile: false,
+        });
+        const realKey = async (key, code, keyCode) => {
+            await page.send("Input.dispatchKeyEvent", { type: "keyDown", key, code, windowsVirtualKeyCode: keyCode, text: key === " " ? " " : undefined });
+            await page.send("Input.dispatchKeyEvent", { type: "keyUp", key, code, windowsVirtualKeyCode: keyCode });
+            await new Promise((r) => setTimeout(r, 400));
+        };
+        await loadSample(page, "twinkle.musicxml");
+        // Tab onto the Drum groove sample from the control before it.
+        await page.evaluate(`
+            document.getElementById("setup-wrap").open = true;
+            const samples = document.querySelector("details.try");
+            samples.open = true;
+            const buttons = [...samples.querySelectorAll("button")];
+            const drums = buttons.findIndex((b) => /Drum/.test(b.textContent));
+            buttons[drums - 1].focus();
+        `);
+        await realKey("Tab", "Tab", 9);
+        await realKey(" ", "Space", 32);
+        await new Promise((r) => setTimeout(r, 800));
+        const tabbed = await page.evaluate(`
+            const out = { piece: document.getElementById("piece-name").textContent, state: window.sheetMusic.player.state };
+            window.sheetMusic.player.stop();
+            return out;
+        `);
+        check("Space presses a sample button reached by Tab", tabbed.piece, "Drum Groove");
+        check("rather than playing", tabbed.state, "stopped");
+
+        // Click a piano key with the mouse: it keeps focus, but Space plays.
+        const clicked = await page.evaluate(`
+            document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 400));
+            window.sheetMusic.editor.clear();
+            await new Promise((r) => setTimeout(r, 200));
+            const r = document.querySelectorAll(".key")[0].getBoundingClientRect();
+            return { x: r.left + r.width / 2, y: r.top + r.height - 10 };
+        `);
+        for (const type of ["mousePressed", "mouseReleased"]) {
+            await page.send("Input.dispatchMouseEvent", { type, x: clicked.x, y: clicked.y, button: "left", clickCount: 1 });
+        }
+        await new Promise((r) => setTimeout(r, 400));
+        await realKey(" ", "Space", 32);
+        const afterClick = await page.evaluate(`
+            const out = {
+                notes: window.sheetMusic.editor.score.notes.length,
+                state: window.sheetMusic.player.state,
+                focusedKey: document.activeElement.classList.contains("key"),
+            };
+            window.sheetMusic.player.stop();
+            window.sheetMusic.editor.clear();
+            document.querySelector(".editor-head .primary").click();
+            return out;
+        `);
+        check("a clicked piano key keeps focus", afterClick.focusedKey, true);
+        check("and Space then plays", afterClick.state, "playing");
+        check("without writing the key again", afterClick.notes, 1);
+        await page.send("Emulation.clearDeviceMetricsOverride");
+
         console.log("\nkeyboard entry");
         await page.evaluate(`
             document.getElementById("write-music").click();
