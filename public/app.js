@@ -7,6 +7,7 @@ import { PianoRoll } from "./js/midi.js";
 import { Player } from "./js/player.js";
 import { QuestionPanel } from "./js/questions.js";
 import { Editor } from "./js/editor/ui.js";
+import { preparePhoto } from "./js/photo.js";
 
 const ui = {
     file: document.getElementById("file"),
@@ -116,6 +117,9 @@ for (const [key, definition] of Object.entries(INSTRUMENTS)) {
  */
 let canRead = true;
 
+/** The provider doing the reading, as the server names it. */
+let readerName = "the reader";
+
 async function checkReader() {
     // Three states, and they need different explanations: no server at all
     // (the hosted static build), a server with no key, or a working reader.
@@ -123,7 +127,9 @@ async function checkReader() {
     try {
         const response = await fetch("api/health");
         if (!response.ok) throw new Error("no reader");
-        canRead = Boolean((await response.json()).canRead);
+        const health = await response.json();
+        canRead = Boolean(health.canRead);
+        if (health.provider) readerName = health.provider;
     } catch {
         served = false;
         canRead = false;
@@ -376,10 +382,11 @@ async function showPianoRoll(arrayBuffer, label) {
     ready(pianoRoll.title || label, timeline, "MIDI is already at concert pitch, so it plays untransposed.");
 }
 
-/** A photo or a PDF: Claude reads it into MusicXML, then we render that. */
-async function transcribe(file) {
-    setStatus("Claude is reading your sheet music. This can take a minute…", "busy");
+/** A photo or a PDF: it is read into MusicXML, then rendered like any score. */
+async function transcribe(original) {
     questionPanel.hide();
+    setStatus("Preparing the photo…", "busy");
+    const file = await preparePhoto(original);
 
     const body = new FormData();
     body.append("file", file);
@@ -387,26 +394,29 @@ async function transcribe(file) {
 
     // One read at a time: a second upload mid-request would race the first.
     setUploadsEnabled(false);
+    const stopClock = showElapsed(`Reading your sheet music with ${readerName}`);
     let result;
     try {
         result = await post("api/transcribe", body);
     } finally {
+        stopClock();
         setUploadsEnabled(true);
     }
     await showScore(result.musicxml, result.title);
     sourceFile = file;
-    ui.pieceName.textContent = result.title ? `${result.title} — read by Claude` : "Read by Claude";
+    ui.pieceName.textContent = result.title
+        ? `${result.title} — read by ${readerName}`
+        : `Read by ${readerName}`;
     offerDownload(result.title);
     questionPanel.show(result.questions);
 }
 
-/** Sends my answers back so Claude can correct the MusicXML. */
+/** Sends my answers back, so the reader can correct the MusicXML. */
 async function sendAnswers(answers) {
     if (!sourceFile) return;
     questionPanel.setBusy(true);
-    setStatus("Claude is applying your answers…", "busy");
-
     setUploadsEnabled(false);
+    const stopClock = showElapsed(`${readerName} is applying your answers`);
     try {
         const body = new FormData();
         body.append("file", sourceFile);
@@ -422,9 +432,27 @@ async function sendAnswers(answers) {
     } catch (error) {
         setStatus(`Could not apply the answers: ${error.message}`, "error");
     } finally {
+        stopClock();
         questionPanel.setBusy(false);
         setUploadsEnabled(true);
     }
+}
+
+/**
+ * Shows a busy message with a running clock. Reading a page takes a minute or
+ * three, and a sentence that never changes for that long looks like a hang.
+ * Returns the function that stops it.
+ */
+function showElapsed(message) {
+    const started = Date.now();
+    const tick = () => {
+        const seconds = Math.floor((Date.now() - started) / 1000);
+        const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+        setStatus(`${message}… ${clock} — usually one to three minutes`, "busy");
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
 }
 
 function setUploadsEnabled(enabled) {
@@ -499,7 +527,7 @@ function handlePosition(time, step) {
 }
 
 /**
- * Offers the MusicXML on screen as a download. Worth having for a score Claude
+ * Offers the MusicXML on screen as a download. Worth having for a score that was
  * read off a photo: that transcription is otherwise lost on reload.
  */
 function offerDownload(label) {
