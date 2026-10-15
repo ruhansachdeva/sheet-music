@@ -1171,6 +1171,131 @@ async function run() {
         check("but not once a sample replaces it", editButton.afterSample, false);
         check("nor a MIDI file", editButton.afterMidi, false);
 
+        // --- tapping a note on the score selects it ---------------------------
+        // Real mouse events at where the notes are drawn, so the hit-testing
+        // is what gets tested, not a call into the app.
+        console.log("\ntapping a note on the score");
+        const tapAt = async (x, y) => {
+            for (const type of ["mousePressed", "mouseReleased"]) {
+                await page.send("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 });
+            }
+            await new Promise((r) => setTimeout(r, 500));
+            return page.evaluate(`
+                return {
+                    open: !document.getElementById("editor").hidden,
+                    selected: window.sheetMusic.editor.selected,
+                    chip: document.querySelector(".chip.selected")?.textContent ?? null,
+                };
+            `);
+        };
+        // Where each note and rest is drawn right now. The score re-engraves
+        // when the writer opens or closes, so this is asked afresh every time.
+        const drawn = () => page.evaluate(`
+            const out = [];
+            const sheet = window.sheetMusic.score.osmd.GraphicSheet;
+            for (const staves of sheet.MeasureList) for (const measure of staves)
+                for (const entry of measure.staffEntries) for (const voice of entry.graphicalVoiceEntries)
+                    for (const note of voice.notes) {
+                        const box = note.getSVGGElement().getBoundingClientRect();
+                        out.push({
+                            whole: note.sourceNote.getAbsoluteTimestamp().RealValue,
+                            rest: note.sourceNote.isRest(),
+                            x: box.left + box.width / 2,
+                            y: box.top + box.height / 2,
+                            bottom: box.bottom,
+                        });
+                    }
+            return out;
+        `);
+        const noteAt = async (whole, rest = false) =>
+            (await drawn()).find((d) => Math.abs(d.whole - whole) < 1e-6 && d.rest === rest);
+
+        // A laptop first, with the writer as a panel beside the score. The
+        // default headless window is narrow enough for the docked sheet,
+        // which would cover the notes being tapped.
+        await page.send("Emulation.setDeviceMetricsOverride", {
+            width: 1280, height: 800, deviceScaleFactor: 1, mobile: false,
+        });
+
+        await page.evaluate(`
+            const editor = window.sheetMusic.editor;
+            document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 300));
+            if (editor.selected !== null) editor.select(editor.selected);
+            editor.stacking = false;
+            editor.clear();
+            const key = (n) => [...document.querySelectorAll(".key")]
+                .find((k) => k.getAttribute("aria-label") === n);
+            const length = (name) => [...document.querySelectorAll(".length")]
+                .find((b) => b.getAttribute("aria-label") === name);
+            // C D E, then an F that crosses the barline and is drawn as two
+            // tied halves, then G - and rests fill out the last bar.
+            length("quarter note").click();
+            for (const n of ["C4", "D4", "E4"]) key(n).click();
+            length("half note").click();
+            key("F4").click();
+            length("quarter note").click();
+            key("G4").click();
+            await new Promise((r) => setTimeout(r, 600));
+            [...document.querySelectorAll("#editor button")].find((b) => b.textContent === "Done").click();
+            document.getElementById("score").scrollIntoView({ block: "center" });
+            await new Promise((r) => setTimeout(r, 600));
+        `);
+
+        let target = await noteAt(0.25);
+        const tapD = await tapAt(target.x, target.y);
+        check("tapping a note with the writer shut opens it", tapD.open, true);
+        check("with that note selected", [tapD.selected, tapD.chip], [1, "D4"]);
+
+        target = await noteAt(1);
+        const tapTied = await tapAt(target.x, target.y);
+        check("the far half of a tied note selects the note", [tapTied.selected, tapTied.chip], [3, "F4"]);
+
+        target = await noteAt(1.25);
+        const tapNear = await tapAt(target.x, target.bottom + 12);
+        check("a tap just below a note still finds it", [tapNear.selected, tapNear.chip], [4, "G4"]);
+
+        const corner = await page.evaluate(`
+            const box = document.getElementById("score").getBoundingClientRect();
+            return { x: box.left + 6, y: box.top + 6 };
+        `);
+        const tapBlank = await tapAt(corner.x, corner.y);
+        check("a tap nowhere near a note changes nothing", tapBlank.selected, 4);
+
+        target = await noteAt(1.5, true);
+        const tapRest = await tapAt(target.x, target.y);
+        check("tapping past the end goes back to adding notes", tapRest.selected, null);
+
+        // On a phone, with the writer docked over the bottom of the screen.
+        await page.send("Emulation.setDeviceMetricsOverride", {
+            width: 390, height: 844, deviceScaleFactor: 2, mobile: true,
+        });
+        await page.evaluate(`
+            document.getElementById("score").scrollIntoView({ block: "start" });
+            await new Promise((r) => setTimeout(r, 900));
+        `);
+        target = await noteAt(0.5);
+        const tapPhone = await tapAt(target.x, target.y);
+        check("on a phone too", [tapPhone.selected, tapPhone.chip], [2, "E4"]);
+        await page.send("Emulation.setDeviceMetricsOverride", {
+            width: 1280, height: 800, deviceScaleFactor: 1, mobile: false,
+        });
+        await new Promise((r) => setTimeout(r, 300));
+
+        // Only the written score is the writer's to select from.
+        await page.evaluate(`
+            const editor = window.sheetMusic.editor;
+            if (editor.selected !== null) editor.select(editor.selected);
+            await window.sheetMusic.loadSample("twinkle.musicxml");
+            document.getElementById("score").scrollIntoView({ block: "center" });
+            await new Promise((r) => setTimeout(r, 600));
+        `);
+        target = await noteAt(0.25);
+        const tapSample = await tapAt(target.x, target.y);
+        check("a loaded piece's notes are not the writer's", tapSample.selected, null);
+        await page.evaluate(`window.sheetMusic.editor.clear();`);
+        await page.send("Emulation.clearDeviceMetricsOverride");
+
         console.log("\ndrafts survive a reload");
         await page.evaluate(`
             const editor = window.sheetMusic.editor;
