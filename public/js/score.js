@@ -178,6 +178,11 @@ export class Score {
 
         this.applyResponsiveOptions();
         await this.osmd.load(content);
+        // A lone part's name beside the staff only repeats the title above it.
+        if (this.osmd.Sheet.Instruments.length < 2 && this.showingPartNames) {
+            this.osmd.setOptions({ drawPartNames: false, drawPartAbbreviations: false });
+            this.showingPartNames = false;
+        }
         this.trimPageMargins();
         this.osmd.zoom = 1;
         this.osmd.render();

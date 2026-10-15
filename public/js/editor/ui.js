@@ -109,11 +109,11 @@ export class Editor {
     }
 
     open(score, kind = "pitched") {
-        // Settings are chosen once, so on a phone they start folded away. This
-        // is decided on each open rather than at load, since the window may
-        // have been turned or resized since; within one session your choice
-        // to open or fold them sticks.
-        this.settingsOpen = window.matchMedia?.("(min-width: 700px)").matches ?? true;
+        // Settings are chosen once, so they start folded behind the summary
+        // line that shows what they are set to - on a phone and in the laptop
+        // side panel alike, where the keyboard needs the room more. Within
+        // one session, your choice to open them sticks.
+        this.settingsOpen = false;
         this.score = score ? structuredClone(score) : emptyScore(kind);
         // Each time the writer opens it starts in a predictable state, rather
         // than still stacking chords from the last session.

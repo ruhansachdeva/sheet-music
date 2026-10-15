@@ -98,16 +98,22 @@ function highlightWritten(seconds) {
     if (step >= 0) score.showStep(step);
 }
 
-/** Scrolls so the newest notes sit just above the writer's sheet. */
+/**
+ * Keeps the newest notes in view while writing: just above the docked sheet on
+ * a phone, or at the bottom of the window beside the side panel on a laptop.
+ */
 function revealNewest() {
     if (!document.body.classList.contains("writing")) return;
-    const sheet = ui.editor.offsetHeight;
-    const docked = getComputedStyle(ui.editor).position === "fixed";
-    if (!docked) return; // wide screens keep the writer in the page
-
     const bottom = ui.score.getBoundingClientRect().bottom;
-    const room = window.innerHeight - sheet - 12;
-    window.scrollBy({ top: bottom - room, behavior: "smooth" });
+    const placement = getComputedStyle(ui.editor).position;
+
+    if (placement === "fixed") {
+        const room = window.innerHeight - ui.editor.offsetHeight - 12;
+        window.scrollBy({ top: bottom - room, behavior: "smooth" });
+    } else if (placement === "sticky") {
+        const overflow = bottom - (window.innerHeight - 16);
+        if (overflow > 0) window.scrollBy({ top: overflow, behavior: "smooth" });
+    }
 }
 
 /**

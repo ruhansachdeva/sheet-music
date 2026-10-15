@@ -1096,14 +1096,18 @@ body.dropping #setup {
     padding-top: var(--s2);
 }
 
-@media (max-width: 699px) {
+/* Below 900px the writer docks to the bottom like a keyboard, with the score
+   above it. On a tablet it is centred and kept to a phone-ish width, so the
+   keys do not stretch across the whole screen. */
+@media (max-width: 899px) {
     body.writing .editor:not([hidden]) {
         position: fixed;
         left: 0;
         right: 0;
         bottom: 0;
         z-index: 30;
-        margin: 0;
+        margin: 0 auto;
+        max-width: 680px;
         max-height: 72vh;
         overflow-y: auto;
         overscroll-behavior: contain;
@@ -1123,6 +1127,45 @@ body.dropping #setup {
     /* Room to scroll the end of the score clear of the sheet. */
     body.writing {
         padding-bottom: calc(var(--sheet-height, 360px) + var(--s4));
+    }
+}
+
+/* From 900px: the score on the left and the writer as a panel on the right,
+   which stays put while the score scrolls - the layout notation software uses.
+   The panel is phone-width, so the keyboard keeps sensible proportions. */
+@media (min-width: 900px) {
+    body.writing {
+        max-width: 1400px;
+    }
+
+    body.writing main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 400px;
+        column-gap: var(--s5);
+        align-items: start;
+    }
+
+    body.writing main > * {
+        grid-column: 1;
+    }
+
+    body.writing #editor {
+        grid-column: 2;
+        grid-row: 1 / span 20;
+        position: sticky;
+        top: var(--s4);
+        max-height: calc(100vh - 2 * var(--s4));
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        margin: 0;
+    }
+
+    body.writing .editor-settings {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.writing .keyboard {
+        height: 132px;
     }
 }
 
