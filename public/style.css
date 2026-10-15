@@ -1246,3 +1246,15 @@ button.danger {
 .score.tappable .vf-stavenote {
     cursor: pointer;
 }
+
+/* On a phone the five buttons shown while editing a note only fit on one
+   line with a little less padding; wrapped, they push the keyboard down. */
+@media (max-width: 420px) {
+    .editor-actions {
+        gap: 6px;
+    }
+
+    .editor-actions button {
+        padding: 0 var(--s2);
+    }
+}
