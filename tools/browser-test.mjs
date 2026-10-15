@@ -622,6 +622,13 @@ async function run() {
                 settingsFolded: !settings.open,
                 summary: settings.querySelector("summary").textContent,
             };
+            // Selecting a note brings the most buttons: they should still be
+            // one row, or they push the keyboard down the screen.
+            const rows = () => new Set([...document.querySelectorAll(".editor-actions button")]
+                .map((b) => Math.round(b.getBoundingClientRect().top))).size;
+            window.sheetMusic.editor.select(2);
+            writing.editingRows = rows();
+            window.sheetMusic.editor.select(2);
             document.querySelector(".editor-head .primary").click();
             await new Promise((r) => setTimeout(r, 150));
             writing.transportBackAfterDone =
@@ -634,6 +641,7 @@ async function run() {
         check("and the newest notes stay in view above it", phone.newestInView, true);
         check("the transport bar steps aside while writing", phone.transportHidden, true);
         check("and comes back after Done", phone.transportBackAfterDone, true);
+        check("editing a note keeps the buttons on one row", phone.editingRows, 1);
         check("settings start folded on a phone", phone.settingsFolded, true);
         check("behind a summary of what they are", phone.summary, "4/4 · ♩ 100 · C major · treble");
         await page.evaluate(`document.getElementById("write-music").click();`);
