@@ -172,7 +172,9 @@ async function main() {
     const server = spawn(process.execPath, ["server.js"], {
         cwd: ROOT,
         env: { ...process.env, PORT: String(PORT) },
-        stdio: ["ignore", "ignore", "inherit"],
+        // The server's log says when a model was busy and another one
+        // answered instead, which changes what the numbers mean.
+        stdio: ["ignore", "inherit", "inherit"],
     });
     for (let i = 0; i < 80; i++) {
         try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break; } catch {}
@@ -291,7 +293,7 @@ async function main() {
 
             const diff = compare(original.notes, read.notes);
             const pct = (n) => `${Math.round(n * 100)}%`;
-            console.log(`  read in ${seconds}s, ${result.questions.length} question(s)`);
+            console.log(`  read in ${seconds}s by ${result.model ?? "an unnamed model"}, ${result.questions.length} question(s)`);
             console.log(`  notes      ${diff.got} read vs ${diff.expected} written` +
                 (diff.extra > 0 ? `, ${diff.extra} extra` : ""));
             console.log(`  placed     ${pct(diff.placed)} of written notes found`);
