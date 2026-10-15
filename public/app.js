@@ -87,6 +87,11 @@ new ResizeObserver(() => {
     document.documentElement.style.setProperty("--sheet-height", `${height}px`);
 }).observe(ui.editor);
 
+// The same for the transport bar, which grows when More is open.
+new ResizeObserver(() => {
+    document.documentElement.style.setProperty("--transport-height", `${ui.controls.offsetHeight}px`);
+}).observe(ui.controls);
+
 /** Lights up the note being edited on the score, or nothing. */
 function highlightWritten(seconds) {
     if (view !== score || !timeline) return;
