@@ -37,6 +37,16 @@ function midiOf(note) {
 }
 
 /**
+ * How far a note's part says it sounds from where it is written, in semitones,
+ * from the part's MusicXML <transpose>; null when the part does not say. OSMD
+ * keeps no difference between "says 0" and "says nothing", so 0 is "nothing".
+ */
+function declaredTranspose(note) {
+    const semitones = note.ParentStaff?.ParentInstrument?.PlaybackTranspose;
+    return Number.isFinite(semitones) && semitones !== 0 ? semitones : null;
+}
+
+/**
  * A drum note's General MIDI percussion key, or null if the note is pitched.
  * Unpitched notes still carry a pitch in OSMD (that is how they get drawn on
  * the right line), so the part's MIDI channel is what marks them as drums.
@@ -294,6 +304,8 @@ export class Score {
                         duration: Math.max(toSeconds(lengthWhole, bpm), MIN_NOTE_SECONDS),
                         midi,
                         drumKey, // non-null for a note on a percussion staff
+                        // The part's own transposition, if its MusicXML gives one.
+                        transpose: drumKey === null ? declaredTranspose(note) : null,
                         step: stepIndex,
                     });
                 }
@@ -316,6 +328,8 @@ export class Score {
         return {
             scoreBpm,
             bpm: fallbackBpm,
+            // Semitones the score's own <transpose> moves it, if any part has one.
+            transposedBy: notes.find((n) => n.transpose !== null)?.transpose ?? null,
             notes,
             steps,
             beats: beatGrid(measures),
