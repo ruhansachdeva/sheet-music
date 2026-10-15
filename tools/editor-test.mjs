@@ -96,5 +96,46 @@ const result = spawnSync(process.execPath, ["tools/check-musicxml.mjs", ...paths
 process.stdout.write(result.stdout.replace(/^/gm, "  "));
 if (result.status !== 0) { process.stderr.write(result.stderr); failures += 1; }
 
+// Any mix of lengths a person can pick - dotted, triplet, rest, chord - in any
+// time signature, must come out with every measure adding up and no time lost.
+// Greedy splitting once stranded remainders like 40 ticks that nothing writes.
+console.log("\nrandom scores add up");
+check("a 1320-tick remainder is a half and a dotted eighth, not a lost 40",
+    decompose(1320), [{ duration: "half", dots: 0 }, { duration: "eighth", dots: 1 }]);
+check("60 ticks is a 32nd, though the palette stops at sixteenths",
+    decompose(60), [{ duration: "32nd", dots: 0 }]);
+{
+    let seed = 7;
+    const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const pick = (list) => list[Math.floor(random() * list.length)];
+    const wrong = [];
+    for (let trial = 0; trial < 2000; trial++) {
+        const score = emptyScore(random() < 0.2 ? "drums" : "pitched");
+        [score.beats, score.beatType] = pick([[4, 4], [3, 4], [2, 4], [6, 8]]);
+        const count = 1 + Math.floor(random() * 14);
+        for (let i = 0; i < count; i++) {
+            const n = { duration: pick(["whole", "half", "quarter", "eighth", "16th"]), dots: random() < 0.2 ? 1 : 0 };
+            if (random() < 0.25) n.tuplet = 3;
+            if (random() < 0.15) n.rest = true;
+            else if (score.kind === "drums") n.drums = [pick([36, 38, 42])];
+            else n.midis = random() < 0.2 ? [60, 64] : [60 + Math.floor(random() * 12)];
+            score.notes.push(n);
+        }
+        const xml = toMusicXml(score);
+        const perMeasure = (DIVISIONS * 4 * score.beats) / score.beatType;
+        const written = score.notes.reduce((sum, n) => sum + ticksOf(n), 0);
+        let total = 0;
+        for (const measure of xml.match(/<measure[\s\S]*?<\/measure>/g)) {
+            const sum = (measure.match(/<note>[\s\S]*?<\/note>/g) ?? [])
+                .filter((n) => !n.includes("<chord/>"))
+                .reduce((s, n) => s + Number(/<duration>([^<]*)</.exec(n)[1]), 0);
+            if (sum !== perMeasure) wrong.push(`trial ${trial}: a measure of ${sum}, not ${perMeasure}`);
+            total += sum;
+        }
+        if (total < written) wrong.push(`trial ${trial}: ${written - total} ticks lost`);
+    }
+    check("2000 random scores, every measure adds up", wrong.slice(0, 3), []);
+}
+
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);
