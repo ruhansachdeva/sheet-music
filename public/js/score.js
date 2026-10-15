@@ -322,9 +322,12 @@ export class Score {
             return;
         }
 
-        if (index < this.stepIndex) {
+        // A freshly reset cursor is already on step 0 - that is the position
+        // buildTimeline() recorded as step 0 - so it must not be stepped past.
+        // Starting from -1 here put the highlight one note ahead of the audio.
+        if (this.stepIndex < 0 || index < this.stepIndex) {
             cursor.reset();
-            this.stepIndex = -1;
+            this.stepIndex = 0;
         }
         while (this.stepIndex < index && !cursor.iterator.EndReached) {
             cursor.next();
