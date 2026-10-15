@@ -720,6 +720,8 @@ async function run() {
                 durations: t.notes.map((n) => round(n.duration)),
                 timeModifications: xml.split("<time-modification>").length - 1,
                 brackets: xml.split('tuplet type="start"').length - 1,
+                // eighths are beamed by the beat rather than flagged one by one
+                beams: document.querySelectorAll("#score .vf-beam").length,
                 // OSMD read them as tuplets, which is what draws the 3 over them
                 osmdTuplets: window.sheetMusic.score.osmd.Sheet.SourceMeasures[0]
                     .VerticalSourceStaffEntryContainers.flatMap((c) => c.StaffEntries)
@@ -736,6 +738,7 @@ async function run() {
         check("written as three in the time of two", triplets.timeModifications, 3);
         check("under one bracket", triplets.brackets, 1);
         check("and read back as a tuplet", triplets.osmdTuplets, 3);
+        check("beamed together, not flagged one by one", triplets.beams >= 1, true);
 
         // --- stacking notes into chords --------------------------------------
         console.log("\nchords");

@@ -63,6 +63,10 @@ export class Score {
             drawTitle: false,
             drawSubtitle: false,
             drawComposer: false,
+            // Beam eighths and shorter by the beat, as printed music does. This
+            // only touches notes with no <beam> in the XML, so a file that
+            // says how it is beamed keeps its own beaming.
+            autoBeam: true,
             drawingParameters: "default",
             followCursor: true,
             cursorsOptions: [{ type: 0, color: "#2563eb", alpha: 0.25, follow: true }],
