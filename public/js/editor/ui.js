@@ -690,13 +690,15 @@ export class Editor {
      */
     renderStrip() {
         const strip = el("div", "editor-strip");
-        strip.setAttribute("role", "listbox");
-        strip.setAttribute("aria-label", "Notes written");
 
         if (this.score.notes.length === 0) {
+            // No notes, no options: a listbox with nothing in it is announced
+            // as a list that cannot be navigated, so this is plain text.
             strip.appendChild(el("span", "strip-empty", "Notes you write appear here. Tap one to change it."));
             return strip;
         }
+        strip.setAttribute("role", "listbox");
+        strip.setAttribute("aria-label", "Notes written");
 
         this.score.notes.forEach((note, index) => {
             const chip = el("button", "chip");

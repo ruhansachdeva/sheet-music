@@ -261,9 +261,43 @@ async function run() {
         await page.send("Runtime.enable");
         await page.send("Log.enable");
         await page.send("Page.enable");
+        // Pin the colour scheme. Left alone, headless Chrome follows the host's
+        // appearance, so the same run tested the light theme by day and the
+        // dark theme by night - and a light-mode regression could hide.
+        // Buttons fade their colours over 0.15s, so wait for that to finish:
+        // an audit taken mid-fade samples colours that are never really shown.
+        const scheme = async (value) => {
+            await page.send("Emulation.setEmulatedMedia", {
+                features: [{ name: "prefers-color-scheme", value }],
+            });
+            await new Promise((resolve) => setTimeout(resolve, 400));
+        };
+        await scheme("light");
         await waitFor(() => page.evaluate("return Boolean(window.sheetMusic)"), {
             what: "the app to boot",
         });
+
+        // axe-core, the standard automated accessibility checker. The first
+        // audit runs on the untouched first-run page: later sections change the
+        // page enough that a contrast failure can go unseen mid-suite.
+        await page.evaluate(`
+            await new Promise((resolve, reject) => {
+                const script = document.createElement("script");
+                script.src = "https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.10.2/axe.min.js";
+                script.onload = resolve;
+                script.onerror = () => reject(new Error("could not load axe-core"));
+                document.head.appendChild(script);
+            });
+        `);
+        const auditNow = () => page.evaluate(`
+            const result = await axe.run(document, { resultTypes: ["violations"] });
+            return result.violations.map((v) => v.id + " (" + v.impact + ", " + v.nodes.length + ")");
+        `);
+        console.log("\naccessibility, first run");
+        check("no violations on the first-run page, light", await auditNow(), []);
+        await scheme("dark");
+        check("no violations on the first-run page, dark", await auditNow(), []);
+        await scheme("light");
 
         const quarter96 = 60 / 96;
         const quarter100 = 60 / 100;
@@ -1022,6 +1056,30 @@ async function run() {
         check("including the typed one", asked.submitted?.[1]?.answer, "A natural");
 
         await page.evaluate(`document.getElementById("questions").hidden = true;`);
+
+        // --- accessibility ---------------------------------------------------
+        // axe-core, the standard automated checker, against the page with a
+        // score loaded and with the writer open. Any violation fails the run.
+        console.log("\naccessibility, in use");
+        await loadSample(page, "twinkle.musicxml");
+        check("no violations with a score loaded", await auditNow(), []);
+        await page.evaluate(`
+            window.sheetMusic.editor.clear();
+            document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 400));
+            window.sheetMusic.editor.clear();
+            await new Promise((r) => setTimeout(r, 300));
+        `);
+        check("no violations with the writer open on an empty draft", await auditNow(), []);
+        await page.evaluate(`
+            [...document.querySelectorAll(".key")][0].click();
+            await new Promise((r) => setTimeout(r, 400));
+        `);
+        check("or with notes in the strip", await auditNow(), []);
+        await page.evaluate(`
+            window.sheetMusic.editor.clear();
+            document.querySelector(".editor-head .primary").click();
+        `);
 
         // --- a file that is not sheet music ---------------------------------
         console.log("\nbad input");
