@@ -1385,6 +1385,36 @@ async function run() {
             document.querySelector(".editor-head .primary").click();
         `);
 
+        // --- dark mode -------------------------------------------------------
+        // Everything above runs in the light theme; the dark one gets its own
+        // audit, and the two things that went wrong in it before.
+        console.log("\ndark mode");
+        await scheme("dark");
+        await loadSample(page, "twinkle.musicxml");
+        check("no violations with a score loaded", await auditNow(), []);
+        const dark = await page.evaluate(`
+            document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 400));
+            [...document.querySelectorAll(".key")][0].click();
+            await new Promise((r) => setTimeout(r, 400));
+            const key = getComputedStyle(document.querySelector(".key.black"));
+            return {
+                scheme: getComputedStyle(document.documentElement).colorScheme,
+                edge: key.borderTopColor,
+                fill: key.backgroundColor,
+                panel: getComputedStyle(document.getElementById("editor")).backgroundColor,
+            };
+        `);
+        check("no violations with the writer open", await auditNow(), []);
+        check("native controls follow the theme", dark.scheme, "light dark");
+        check("a black key has an edge of another colour", dark.edge !== dark.fill, true);
+        check("and stands out from the panel", dark.fill !== dark.panel, true);
+        await page.evaluate(`
+            window.sheetMusic.editor.clear();
+            document.querySelector(".editor-head .primary").click();
+        `);
+        await scheme("light");
+
         // --- a file that is not sheet music ---------------------------------
         console.log("\nbad input");
         // The app is supposed to log this one, so it is not a problem.
