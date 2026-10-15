@@ -162,7 +162,7 @@ export class Player {
         this.options[name] = value;
         // Rebuild the queue so the change applies from here on, without
         // re-scheduling what has already been handed to the audio graph.
-        if (this.state === "playing") this.rebuildQueue(this.scheduledUntil);
+        if (this.state === "playing") this.rebuildQueue(this.scheduledUntil, this.countingIn);
     }
 
     // --- transport ----------------------------------------------------------
@@ -184,6 +184,8 @@ export class Player {
             withCountIn && this.timeline.countIn.length ? -this.timeline.countIn[0].time : 0;
         this.musicStart = ctx.currentTime + LEAD_IN + (countInLength - startAt) * this.scale;
 
+        // Kept, so a rebuild part-way through the count-in keeps the rest of it.
+        this.countingIn = withCountIn;
         this.rebuildQueue(startAt, withCountIn);
         this.state = "playing";
         this.onState(this.state);
@@ -228,7 +230,7 @@ export class Player {
         this.silence();
         this.scale = this.timeline.bpm / this.tempo;
         this.musicStart = this.ctx.currentTime + LEAD_IN - here * this.scale;
-        this.rebuildQueue(here);
+        this.rebuildQueue(here, this.countingIn);
     }
 
     // --- scheduling ---------------------------------------------------------
@@ -246,7 +248,9 @@ export class Player {
             }
         }
         if (withCountIn) {
-            for (const beat of this.timeline.countIn) events.push({ time: beat.time, click: beat });
+            for (const beat of this.timeline.countIn) {
+                if (beat.time >= fromRef - epsilon) events.push({ time: beat.time, click: beat });
+            }
         }
 
         events.sort((a, b) => a.time - b.time);
