@@ -249,8 +249,10 @@ player.setInstrument(ui.instrument.value).catch(reportError);
 ui.instrument.addEventListener("change", () => {
     localStorage.setItem("instrument", ui.instrument.value);
     player.setInstrument(ui.instrument.value).catch(reportError);
-    // Writing drums is a different kind of notation, so the writer follows.
-    editor.setKind(writingKind());
+    // Writing drums is a different kind of notation, so an open writer
+    // follows, to that kind's own draft. A closed one is left alone: it opens
+    // on the right kind's draft, and Edit opens what is on screen.
+    if (editor.isOpen) editor.setKind(writingKind(), loadDraft(writingKind()));
 });
 
 /** Drums are written as unpitched notes on a percussion staff. */
