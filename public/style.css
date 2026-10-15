@@ -1171,3 +1171,16 @@ button.danger {
     color: var(--error);
     border-color: color-mix(in srgb, var(--error) 45%, var(--line-strong));
 }
+
+.editor-keys-hint {
+    margin: 0;
+    font-size: var(--text-xs);
+    color: var(--muted);
+}
+
+/* No physical keyboard to speak of on a touch screen. */
+@media (hover: none) {
+    .editor-keys-hint {
+        display: none;
+    }
+}

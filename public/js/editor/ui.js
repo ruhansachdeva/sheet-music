@@ -163,6 +163,88 @@ export class Editor {
         this.changed();
     }
 
+    /**
+     * Keyboard entry, for a laptop. Returns whether the key was used, so the
+     * caller can stop the browser doing anything else with it.
+     */
+    handleKey(event) {
+        if (event.metaKey || event.ctrlKey || event.altKey) return false;
+
+        const key = event.key;
+        const letter = key.length === 1 ? key.toUpperCase() : null;
+        const drums = this.score.kind === "drums";
+
+        // A-G: that note in the current octave, spelled as a natural.
+        const naturals = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+        if (!drums && letter in naturals) {
+            this.addNote((this.octave + 1) * 12 + naturals[letter], SHARP);
+            return true;
+        }
+
+        // 1 2 4 8 6: the fraction of a whole note, with 6 standing in for 16.
+        const lengths = { 1: "whole", 2: "half", 4: "quarter", 8: "eighth", 6: "16th" };
+        if (key in lengths) {
+            this.chooseLength(lengths[key]);
+            return true;
+        }
+
+        switch (key) {
+            case "ArrowUp":
+            case "ArrowDown":
+                if (drums) return false;
+                this.octave = Math.min(7, Math.max(1, this.octave + (key === "ArrowUp" ? 1 : -1)));
+                this.render();
+                return true;
+            case ".":
+                this.toggleDot();
+                return true;
+            case "r":
+            case "R":
+                this.addRest();
+                return true;
+            case "s":
+            case "S":
+                this.stacking = !this.stacking;
+                this.render();
+                return true;
+            case "Backspace":
+            case "Delete":
+                if (this.selectedNote) this.deleteSelected();
+                else this.undo();
+                return true;
+            case "Escape":
+                if (this.selected === null) return false;
+                this.select(this.selected);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** Picks a note value; with a note selected, changes that note's. */
+    chooseLength(name) {
+        this.duration = name;
+        const note = this.selectedNote;
+        if (note && note.duration !== name) {
+            this.remember();
+            note.duration = name;
+            this.changed();
+        }
+        this.render();
+    }
+
+    /** Toggles the dot; with a note selected, on that note. */
+    toggleDot() {
+        this.dotted = !this.dotted;
+        const note = this.selectedNote;
+        if (note) {
+            this.remember();
+            note.dots = this.dotted ? 1 : 0;
+            this.changed();
+        }
+        this.render();
+    }
+
     /** The note being edited, or null. */
     get selectedNote() {
         return this.selected === null ? null : this.score.notes[this.selected] ?? null;
@@ -470,17 +552,7 @@ export class Editor {
             button.title = duration.label;
             button.setAttribute("aria-label", duration.label);
             button.classList.toggle("chosen", duration.name === this.duration);
-            button.addEventListener("click", () => {
-                this.duration = duration.name;
-                // With a note selected, the value changes that note.
-                const note = this.selectedNote;
-                if (note && note.duration !== duration.name) {
-                    this.remember();
-                    note.duration = duration.name;
-                    this.changed();
-                }
-                this.render();
-            });
+            button.addEventListener("click", () => this.chooseLength(duration.name));
             lengths.appendChild(button);
         }
 
@@ -491,16 +563,7 @@ export class Editor {
         dot.setAttribute("aria-label", "Dotted");
         dot.setAttribute("aria-pressed", String(this.dotted));
         dot.classList.toggle("chosen", this.dotted);
-        dot.addEventListener("click", () => {
-            this.dotted = !this.dotted;
-            const note = this.selectedNote;
-            if (note) {
-                this.remember();
-                note.dots = this.dotted ? 1 : 0;
-                this.changed();
-            }
-            this.render();
-        });
+        dot.addEventListener("click", () => this.toggleDot());
         lengths.appendChild(dot);
 
         const actions = el("div", "editor-actions");
@@ -534,7 +597,14 @@ export class Editor {
             actions.append(stack, rest, undo, clear, this.count);
         }
 
-        palette.append(lengths, actions);
+        const hint = el(
+            "p",
+            "editor-keys-hint",
+            this.score.kind === "drums"
+                ? "Keys: 1 2 4 8 6 lengths · . dot · R rest · S stack · ⌫ undo"
+                : "Keys: A–G notes · ↑↓ octave · 1 2 4 8 6 lengths · . dot · R rest · S stack · ⌫ undo",
+        );
+        palette.append(lengths, actions, hint);
         return palette;
     }
 

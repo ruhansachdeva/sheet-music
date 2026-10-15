@@ -961,6 +961,47 @@ async function run() {
         check("and it says so", /Picked up your draft, 3 notes/.test(restored.said), true);
         check("Clear starts a fresh draft", restored.savedAfterClear, 0);
 
+        // --- typing notes on a laptop ----------------------------------------
+        console.log("\nkeyboard entry");
+        await page.evaluate(`
+            document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 300));
+            const editor = window.sheetMusic.editor;
+            editor.stacking = false;
+            editor.clear();
+            document.querySelectorAll(".length")[2].click();
+            document.activeElement?.blur();
+        `);
+        // Real key events through the browser, not synthetic DOM events.
+        const press = async (key) => {
+            const code = { ArrowUp: "ArrowUp", ArrowDown: "ArrowDown", Backspace: "Backspace", ".": "Period" }[key]
+                ?? (/^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : `Digit${key}`);
+            await page.send("Input.dispatchKeyEvent", {
+                type: "keyDown", key, code,
+                text: key.length === 1 ? key : undefined,
+                windowsVirtualKeyCode: key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0,
+            });
+            await page.send("Input.dispatchKeyEvent", { type: "keyUp", key, code });
+            await new Promise((r) => setTimeout(r, 60));
+        };
+        for (const key of ["c", "d", "e", "2", "g", "4", ".", "ArrowUp", "c", "r", "Backspace"]) {
+            await press(key);
+        }
+        await new Promise((r) => setTimeout(r, 600));
+        const typed = await page.evaluate(`
+            const t = window.sheetMusic.timeline;
+            const out = {
+                chips: [...document.querySelectorAll(".chip")].map((c) => c.textContent),
+                durations: t.notes.map((n) => Math.round(n.duration * 100) / 100),
+            };
+            window.sheetMusic.editor.clear();
+            document.querySelector(".editor-head .primary").click();
+            return out;
+        `);
+        check("letters write notes, ↑ moves up an octave, . dots", typed.chips, ["C4", "D4", "E4", "G4", "C5."]);
+        // quarter, quarter, quarter, half, dotted quarter at 100 BPM
+        check("number keys set the lengths", typed.durations, [0.6, 0.6, 0.6, 1.2, 0.9]);
+
         // --- optional: real playback ----------------------------------------
         if (WITH_AUDIO) {
             // The checks above leave whatever they loaded last on screen - the
