@@ -1252,6 +1252,45 @@ async function run() {
             document.getElementById("instrument").dispatchEvent(new Event("change"));
         `);
 
+        // --- switching to drums and back keeps what was written --------------
+        console.log("\nswitching between pitches and drums");
+        const switched = await page.evaluate(`
+            const editor = window.sheetMusic.editor;
+            const pick = async (value) => {
+                const select = document.getElementById("instrument");
+                select.value = value;
+                select.dispatchEvent(new Event("change"));
+                await new Promise((r) => setTimeout(r, 500));
+            };
+            await pick("piano");
+            if (document.getElementById("editor").hidden) document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 300));
+            if (editor.selected !== null) editor.select(editor.selected);
+            editor.stacking = false;
+            editor.clear();
+            document.querySelectorAll(".length")[2].click();
+            const key = (n) => [...document.querySelectorAll(".key")].find((k) => k.getAttribute("aria-label") === n);
+            for (const n of ["C4", "D4", "E4", "F4"]) key(n).click();
+            await new Promise((r) => setTimeout(r, 400));
+            await pick("drums");
+            editor.clear();
+            [...document.querySelectorAll(".pad")].find((p) => p.textContent === "Kick").click();
+            await new Promise((r) => setTimeout(r, 400));
+            await pick("piano");
+            const chips = () => [...document.querySelectorAll(".chip")].map((c) => c.textContent);
+            const pitched = chips();
+            await pick("drums");
+            const drums = chips();
+            await pick("piano");
+            const draft = JSON.parse(localStorage.getItem("draft:pitched") ?? "null");
+            editor.clear();
+            document.querySelector(".editor-head .primary").click();
+            return { pitched, drums, savedNotes: draft?.notes?.length ?? 0 };
+        `);
+        check("back on piano, the notes written are still there", switched.pitched, ["C4", "D4", "E4", "F4"]);
+        check("and the drums written in between", switched.drums, ["Kick"]);
+        check("and the saved draft was not wiped on the way", switched.savedNotes, 4);
+
         // --- photos are prepared on the device before upload ----------------
         console.log("\npreparing a photo");
         const photo = await page.evaluate(`
