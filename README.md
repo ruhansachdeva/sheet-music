@@ -154,6 +154,7 @@ npm test                 # drives the app in headless Chrome
 npm run test:audio       # also plays, and watches the audio clock and cursor
 npm run test:editor      # the note writer's model and MusicXML output
 npm run test:transcribe  # end to end through the model - needs a key
+npm run test:accuracy    # how accurately a page is read back - needs a key
 ```
 
 `npm test` is the useful one. It drives a real browser over the DevTools
@@ -165,6 +166,14 @@ kit pieces, and that the engraving is laid out at a sensible size. It also write
 a score through the note writer's own interface, and answers a set of clarifying
 questions. It needs a Chromium binary — it finds Playwright's cached one, or set
 `CHROME_PATH`.
+
+`npm run test:accuracy` answers a different question from the rest: not "is the
+output valid" but "is it the same music". It renders a sample whose notes are
+known exactly, photographs the engraving, reads the picture back, and diffs the
+result note by note - pitches, onsets and lengths, counted in beats so that a
+tempo misread does not look like every note being wrong. It prints the first
+few disagreements, so a failure tells you which notes were misread rather than
+just that something was.
 
 `npm run test:editor` checks the writer's model directly in Node: that lengths
 decompose into writable note values, that notes crossing a bar line are split
