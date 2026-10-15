@@ -1,7 +1,14 @@
 # Sheet Music Player
 
+**[Try it live →](https://ruhansachdeva.github.io/sheet-music/)**
+
 Upload any sheet music, pick an instrument, and play it back with correct timing,
 a metronome, and the current note lit up on the score.
+
+> The live site is static files on GitHub Pages, so it plays MusicXML and MIDI,
+> writes scores, runs the metronome and highlights notes - everything that runs
+> in the browser. Reading a photo or a PDF needs the server and an API key, so
+> for that, run it locally as below. The page tells you which copy you are on.
 
 - **MusicXML** (`.musicxml`, `.xml`, `.mxl`) and **MIDI** (`.mid`, `.midi`) load
   straight in the browser.
@@ -215,6 +222,14 @@ Libraries come from jsDelivr, so there is no build step:
 and its cursor, [smplr](https://github.com/danigb/smplr) 1.1.0 for soundfont
 instruments and the drum machine, and
 [@tonejs/midi](https://github.com/Tonejs/Midi) 2.0.28 for MIDI files.
+
+## The hosted site
+
+Every push to `main` publishes `public/` and `samples/` to GitHub Pages through
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml), after the sample
+and note-writer checks pass. Nothing secret goes near it: the API key lives only
+in your local `.env`, never in the browser bundle, which is exactly why reading
+photos cannot work there.
 
 ## On a phone
 
