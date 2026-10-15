@@ -17,7 +17,17 @@ export const DURATIONS = [
     { name: "16th", label: "sixteenth note", ticks: DIVISIONS / 4 },
 ];
 
-const BY_NAME = Object.fromEntries(DURATIONS.map((d) => [d.name, d]));
+/**
+ * Shorter values the palette does not offer, used only to split a note at a
+ * bar line. Mixing dotted sixteenths with triplets can leave a few ticks
+ * before the bar line - 60, say - that no palette value can fill.
+ */
+const SPLIT_ONLY = [
+    { name: "32nd", ticks: DIVISIONS / 8 },
+    { name: "64th", ticks: DIVISIONS / 16 },
+];
+
+const BY_NAME = Object.fromEntries([...DURATIONS, ...SPLIT_ONLY].map((d) => [d.name, d]));
 
 /** Ticks a note lasts, including its dot. */
 export function ticksOf({ duration, dots = 0, tuplet = 0 }) {
@@ -37,7 +47,14 @@ const WRITABLE = DURATIONS.flatMap((d) => [
     { duration: d.name, dots: 1, tuplet: 0, ticks: d.ticks * 1.5 },
     { duration: d.name, dots: 0, tuplet: 0, ticks: d.ticks },
     { duration: d.name, dots: 0, tuplet: 3, ticks: (d.ticks * 2) / 3 },
-]).sort((a, b) => b.ticks - a.ticks || a.tuplet - b.tuplet);
+])
+    .concat([
+        // With these, every multiple of 20 ticks can be written exactly.
+        { duration: "32nd", dots: 0, tuplet: 0, ticks: DIVISIONS / 8 },
+        { duration: "32nd", dots: 0, tuplet: 3, ticks: DIVISIONS / 12 },
+        { duration: "64th", dots: 0, tuplet: 3, ticks: DIVISIONS / 24 },
+    ])
+    .sort((a, b) => b.ticks - a.ticks || a.tuplet - b.tuplet);
 
 /**
  * Breaks a length into note values that can actually be written. A tie across
@@ -45,20 +62,45 @@ const WRITABLE = DURATIONS.flatMap((d) => [
  * so it becomes several notes tied together.
  */
 export function decompose(ticks) {
-    const parts = [];
-    let left = ticks;
+    // Every writable length is a whole number of these (the dotted sixteenth,
+    // 180, and the sixteenth triplet, 80, set it), so lengths can be counted.
+    const UNIT = 20;
+    const units = Math.round(ticks / UNIT);
 
-    while (left > 0) {
-        const fits = WRITABLE.find((w) => w.ticks <= left + 1e-9);
-        if (!fits) break; // shorter than anything writable, so drop the rest
-        parts.push({
-            duration: fits.duration,
-            dots: fits.dots,
-            ...(fits.tuplet ? { tuplet: fits.tuplet } : {}),
-        });
-        left -= fits.ticks;
+    // best[n]: the best way to write n units, or undefined if there is none.
+    // Picking the longest value first, as this once did, can strand a
+    // remainder nothing writes - 1320 ticks as a whole-note triplet leaves 40
+    // - and the bar came up short. Searching every way to add up avoids that.
+    const best = [[]];
+    for (let n = 1; n <= units; n++) {
+        for (const value of WRITABLE) {
+            const size = value.ticks / UNIT;
+            const rest = best[n - size];
+            if (size > n || !Number.isInteger(size) || !rest) continue;
+            const candidate = [value, ...rest].sort((a, b) => b.ticks - a.ticks);
+            if (!best[n] || betterSplit(candidate, best[n])) best[n] = candidate;
+        }
     }
-    return parts;
+
+    return (best[units] ?? []).map((value) => ({
+        duration: value.duration,
+        dots: value.dots,
+        ...(value.tuplet ? { tuplet: value.tuplet } : {}),
+    }));
+}
+
+/**
+ * Fewer notes is the better split, then fewer triplets - a plain length split
+ * by a bar line should stay plain - then the longer notes first.
+ */
+function betterSplit(a, b) {
+    if (a.length !== b.length) return a.length < b.length;
+    const triplets = (split) => split.filter((value) => value.tuplet).length;
+    if (triplets(a) !== triplets(b)) return triplets(a) < triplets(b);
+    for (let i = 0; i < a.length; i++) {
+        if (a[i].ticks !== b[i].ticks) return a[i].ticks > b[i].ticks;
+    }
+    return false;
 }
 
 export const SHARP = 1;
