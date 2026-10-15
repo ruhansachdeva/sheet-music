@@ -1125,3 +1125,49 @@ body.dropping #setup {
         padding-bottom: calc(var(--sheet-height, 360px) + var(--s4));
     }
 }
+
+/* --- the strip of written notes ------------------------------------------ */
+
+.editor-strip {
+    display: flex;
+    gap: var(--s2);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: var(--s1) 0;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+}
+
+.strip-empty {
+    font-size: var(--text-sm);
+    color: var(--muted);
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+}
+
+.chip {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 0 var(--s3) 0 var(--s2);
+    gap: var(--s1);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    border-radius: 999px;
+}
+
+.chip .glyph {
+    width: 20px;
+    height: 20px;
+}
+
+.chip.selected {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+}
+
+button.danger {
+    color: var(--error);
+    border-color: color-mix(in srgb, var(--error) 45%, var(--line-strong));
+}

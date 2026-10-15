@@ -70,6 +70,7 @@ const questionPanel = new QuestionPanel(ui.questions, { onSubmit: sendAnswers })
 const editor = new Editor(ui.editor, {
     onChange: (written) => showWrittenScore(written),
     onPlay: () => Promise.resolve(player.toggle()).catch(reportError),
+    onSelect: (seconds) => highlightWritten(seconds),
     onPreview: (midi) => player.preview(midi).catch(reportError),
     onPreviewDrum: (gm) => player.previewDrum(gm).catch(reportError),
     onClose: () => {
@@ -85,6 +86,17 @@ new ResizeObserver(() => {
     const height = ui.editor.hidden ? 0 : ui.editor.offsetHeight;
     document.documentElement.style.setProperty("--sheet-height", `${height}px`);
 }).observe(ui.editor);
+
+/** Lights up the note being edited on the score, or nothing. */
+function highlightWritten(seconds) {
+    if (view !== score || !timeline) return;
+    if (seconds === null || seconds === undefined) {
+        score.reset();
+        return;
+    }
+    const step = timeline.steps.findIndex((s) => Math.abs(s.time - seconds) < 0.01);
+    if (step >= 0) score.showStep(step);
+}
 
 /** Scrolls so the newest notes sit just above the writer's sheet. */
 function revealNewest() {
@@ -104,7 +116,9 @@ async function showWrittenScore() {
     questionPanel.hide();
     try {
         await showScore(editor.toMusicXml(), editor.score.title);
-        revealNewest();
+        // Re-engraving clears the highlight, so put the selected note's back.
+        highlightWritten(editor.selectedOnset());
+        if (editor.selected === null) revealNewest();
     } catch (error) {
         reportError(error);
     }
