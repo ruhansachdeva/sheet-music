@@ -695,7 +695,7 @@ async function run() {
             };
             const tapAllBlack = () => blackKeys().forEach((k) => k.click());
             const stack = [...document.querySelectorAll(".editor-actions button")]
-                .find((b) => b.textContent === "Stack");
+                .find((b) => b.textContent === "Chord");
 
             const out = { stackStartsOff: !stack.classList.contains("chosen") };
             await setKey(0); editor.clear(); tapAllBlack();
@@ -707,7 +707,7 @@ async function run() {
             await setKey(0); editor.clear();
             return out;
         `);
-        check("Stack starts switched off, and looks it", spelling.stackStartsOff, true);
+        check("Chord starts switched off, and looks it", spelling.stackStartsOff, true);
         check("C major: the keys read C# Eb F# Ab Bb", spelling.c.labels, ["C♯", "E♭", "F♯", "A♭", "B♭"]);
         check("and that is what gets written", spelling.c.written, ["C#", "Eb", "F#", "Ab", "Bb"]);
         check("F major spells them as flats", spelling.f.written, ["Db", "Eb", "Gb", "Ab", "Bb"]);
@@ -825,17 +825,25 @@ async function run() {
             const action = (t) => [...document.querySelectorAll(".editor-actions button")]
                 .find((b) => b.textContent === t);
 
-            action("Stack").click();
+            const mode = () => document.querySelector(".editor-mode").textContent;
+            const said = { before: mode(), nextBefore: Boolean(action("Next chord")) };
+            action("Chord").click();
+            said.on = mode();
+            said.nextOn = Boolean(action("Next chord"));
             key("C4").click();
             key("E4").click();
+            said.building = mode();
+            said.nextBuilding = Boolean(action("Next chord"));
             key("G4").click();
-            action("Stack").click();
+            action("Chord").click();
+            said.off = mode();
             key("D4").click();
             await new Promise((r) => setTimeout(r, 500));
 
             const timeline = window.sheetMusic.timeline;
             const xml = window.sheetMusic.editor.toMusicXml();
             return {
+                said,
                 written: window.sheetMusic.editor.score.notes.length,
                 midis: timeline.notes.map((n) => n.midi),
                 onsets: timeline.notes.map((n) => Math.round(n.time * 100) / 100),
@@ -846,6 +854,43 @@ async function run() {
         check("all of its pitches are there", chords.midis, [60, 64, 67, 62]);
         check("and they sound together", chords.onsets, [0, 0, 0, 0.6]);
         check("written as a chord", chords.chordTags, 2);
+        check("the writer says how to write a chord", chords.said.before,
+            "Tap a key to add a quarter note. For notes that sound together, press Chord.");
+        check("and what chord mode does once it is on", chords.said.on, "Chord: tap the notes that sound together.");
+        check("and which chord is being built", chords.said.building,
+            "Chord C4·E4: tap to add more. Next chord starts another.");
+        check("and when it is off again", chords.said.off, chords.said.before);
+        check("Next chord appears only once a chord has a note",
+            [chords.said.nextBefore, chords.said.nextOn, chords.said.nextBuilding], [false, false, true]);
+
+        // A progression: Next chord ends one chord and starts the next, so
+        // writing C then F then G needs no switching chord mode off and on.
+        const progression = await page.evaluate(`
+            const editor = window.sheetMusic.editor;
+            editor.stacking = false;
+            editor.clear();
+            const key = (n) => [...document.querySelectorAll(".key")]
+                .find((k) => k.getAttribute("aria-label") === n);
+            const action = (t) => [...document.querySelectorAll(".editor-actions button")]
+                .find((b) => b.textContent === t);
+
+            action("Chord").click();
+            for (const n of ["C4", "E4", "G4"]) key(n).click();
+            action("Next chord").click();
+            // The keyboard shows one octave, so F and G come as inversions.
+            for (const n of ["C4", "F4", "A4"]) key(n).click();
+            action("Next chord").click();
+            for (const n of ["D4", "G4", "B4"]) key(n).click();
+            const out = {
+                chips: [...document.querySelectorAll(".chip")].map((c) => c.textContent),
+                stillChord: editor.stacking,
+            };
+            editor.stacking = false;
+            editor.clear();
+            return out;
+        `);
+        check("Next chord writes a progression", progression.chips, ["C4·E4·G4", "C4·F4·A4", "D4·G4·B4"]);
+        check("and stays in chord mode", progression.stillChord, true);
 
         // The case that went wrong on the live site: a chord written after
         // other notes must be a new chord, not merged into the note before it.
@@ -865,9 +910,9 @@ async function run() {
             for (const n of ["C4", "E4", "G4"]) key(n).click();
             length("Triplet").click();
             length("half note").click();
-            action("Stack").click();
+            action("Chord").click();
             for (const n of ["C4", "E4", "G4"]) key(n).click();
-            action("Stack").click();
+            action("Chord").click();
             await new Promise((r) => setTimeout(r, 500));
             const out = {
                 chips: [...document.querySelectorAll(".chip")].map((c) => c.textContent),
@@ -925,7 +970,7 @@ async function run() {
             const action = (t) => [...document.querySelectorAll(".editor-actions button")]
                 .find((b) => b.textContent === t);
 
-            action("Stack").click();
+            action("Chord").click();
             pad("Kick").click();
             pad("Hi-hat").click();
             await new Promise((r) => setTimeout(r, 500));

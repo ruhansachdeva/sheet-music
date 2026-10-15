@@ -85,9 +85,9 @@ export class Editor {
         this.dotted = false;
         this.triplet = false;
         // Must start as a real boolean: classList.toggle(name, undefined)
-        // toggles rather than forcing off, which drew Stack as switched on.
+        // toggles rather than forcing off, which drew Chord as switched on.
         this.stacking = false;
-        // True from turning Stack on until the chord's first note is written:
+        // True from turning Chord on until the chord's first note is written:
         // that note starts a new chord, and only later taps join it.
         this.stackFresh = false;
         // The note being edited, by index, or null when adding at the end.
@@ -140,7 +140,7 @@ export class Editor {
 
     changed() {
         this.refreshStrip();
-        this.refreshCount();
+        this.refreshMode();
         if (this.summaryEl) this.summaryEl.textContent = this.summaryText();
         this.onChange?.(this.score);
     }
@@ -163,8 +163,15 @@ export class Editor {
             spell: { [midi]: prefer },
             ...this.length(),
         });
-        this.stackFresh = false;
+        this.chordStarted();
         this.changed();
+    }
+
+    /** The note just written began a chord, so Next chord now has a use. */
+    chordStarted() {
+        if (!this.stackFresh) return;
+        this.stackFresh = false;
+        this.refreshPalette();
     }
 
     /**
@@ -255,6 +262,13 @@ export class Editor {
         this.render();
     }
 
+    /** Ends the chord being built and starts another, staying in chord mode. */
+    nextChord() {
+        this.stacking = true;
+        this.stackFresh = true;
+        this.render();
+    }
+
     /** Toggles triplets; with a note selected, on that note. */
     toggleTriplet() {
         this.triplet = !this.triplet;
@@ -287,7 +301,7 @@ export class Editor {
 
     /**
      * With a note selected, a key changes that note rather than adding one:
-     * it replaces the pitch, or with Stack on, adds to its chord. Returns
+     * it replaces the pitch, or with Chord on, adds to its chord. Returns
      * whether it was taken.
      */
     editSelected(field, value, prefer) {
@@ -352,7 +366,7 @@ export class Editor {
      * which is what makes a chord. Returns whether it was taken.
      */
     joinToLast(field, value, prefer) {
-        // The first tap after pressing Stack begins a new chord rather than
+        // The first tap after pressing Chord begins a new chord rather than
         // joining whatever happened to come before it.
         if (!this.stacking || this.stackFresh) return false;
 
@@ -378,12 +392,16 @@ export class Editor {
             drums: [gm],
             ...this.length(),
         });
-        this.stackFresh = false;
+        this.chordStarted();
         this.changed();
     }
 
     addRest() {
+        // A rest cannot be part of a chord, so it ends one. Redraw if that
+        // switched Chord off, or the button would still look pressed.
+        const wasStacking = this.stacking;
         this.stacking = false;
+        if (wasStacking) this.render();
         const note = this.selectedNote;
         if (note) {
             this.remember();
@@ -439,6 +457,11 @@ export class Editor {
         if (!old) return;
         old.replaceWith(this.renderStrip());
         this.scrollStrip();
+    }
+
+    /** Rebuilds the note values and actions, leaving the keyboard alone. */
+    refreshPalette() {
+        this.container.querySelector(".editor-palette")?.replaceWith(this.renderPalette());
     }
 
     /** Keeps the note being edited, or the newest, in view in the strip.
@@ -614,12 +637,20 @@ export class Editor {
 
         const actions = el("div", "editor-actions");
 
-        // Stacking is what turns a run of single notes into chords.
-        const stack = el("button", "stack", "Stack");
-        stack.title = "Add the next note to the one before it";
+        // Chord mode is what turns a run of single notes into chords.
+        const stack = el("button", "stack", "Chord");
+        stack.title = "Play the notes you tap together, as one chord";
         stack.setAttribute("aria-pressed", String(Boolean(this.stacking)));
         stack.classList.toggle("chosen", Boolean(this.stacking));
         stack.addEventListener("click", () => this.toggleStack());
+
+        // Once a chord has notes, the next one is a tap away, without
+        // switching chord mode off and on again. It takes Clear's place, so
+        // the row still fits on a phone: wiping everything is rarely what
+        // you want halfway through a chord.
+        const chordStarted = this.stacking && !this.stackFresh && !this.selectedNote;
+        const next = el("button", "next-chord", "Next chord");
+        next.addEventListener("click", () => this.nextChord());
 
         const rest = el("button", null, "Rest");
         rest.addEventListener("click", () => this.addRest());
@@ -628,27 +659,68 @@ export class Editor {
         const clear = el("button", null, "Clear");
         clear.addEventListener("click", () => this.clear());
 
-        this.count = el("span", "editor-count");
         if (this.selectedNote) {
             // Editing one note: offer to remove it, or to go back to adding.
             const remove = el("button", "danger", "Delete");
             remove.addEventListener("click", () => this.deleteSelected());
             const finish = el("button", null, "Done editing");
             finish.addEventListener("click", () => this.select(this.selected));
-            actions.append(stack, rest, remove, undo, finish, this.count);
+            actions.append(stack, rest, remove, undo, finish);
         } else {
-            actions.append(stack, rest, undo, clear, this.count);
+            actions.append(stack, ...(chordStarted ? [next] : []), rest, undo, ...(chordStarted ? [] : [clear]));
         }
+
+        // Says what a tap does right now, in words, since the modes are
+        // otherwise only a button colour - and a phone has no tooltips.
+        this.modeEl = el("p", "editor-mode");
+        this.modeEl.setAttribute("role", "status");
+        this.refreshMode();
 
         const hint = el(
             "p",
             "editor-keys-hint",
             this.score.kind === "drums"
-                ? "Keys: 1 2 4 8 6 lengths · . dot · 3 triplet · R rest · S stack · ⌫ undo"
-                : "Keys: A–G notes · ↑↓ octave · 1 2 4 8 6 lengths · . dot · 3 triplet · R rest · S stack · ⌫ undo",
+                ? "Keys: 1 2 4 8 6 lengths · . dot · 3 triplet · R rest · S chord · ⌫ undo"
+                : "Keys: A–G notes · ↑↓ octave · 1 2 4 8 6 lengths · . dot · 3 triplet · R rest · S chord · ⌫ undo",
         );
-        palette.append(lengths, actions, hint);
+        palette.append(lengths, actions, this.modeEl, hint);
         return palette;
+    }
+
+    /** What tapping a key or a drum will do, given the mode the writer is in. */
+    modeText() {
+        const drums = this.score.kind === "drums";
+        const what = drums ? "drum" : "key";
+        const together = drums ? "hit together" : "sound together";
+        const note = this.selectedNote;
+
+        if (note) {
+            const which = `note ${this.selected + 1} (${chipLabel(note)})`;
+            return this.stacking && !note.rest
+                ? `Adding to ${which}: each ${what} you tap joins it.`
+                : `Changing ${which}: tap a ${what} to replace it, or a length to change it.`;
+        }
+        if (this.stacking) {
+            const last = this.score.notes.at(-1);
+            if (this.stackFresh || !last || last.rest) {
+                return `Chord: tap the ${drums ? "drums" : "notes"} that ${together}.`;
+            }
+            return `Chord ${chipLabel(last)}: tap to add more. Next chord starts another.`;
+        }
+        return `Tap a ${what} to add a ${this.lengthLabel()}. For ${drums ? "drums" : "notes"} that ${together}, press Chord.`;
+    }
+
+    /** The chosen length in words, e.g. "dotted quarter note" or "eighth-note triplet". */
+    lengthLabel() {
+        const label = DURATIONS.find((d) => d.name === this.duration)?.label ?? "note";
+        if (this.triplet) return `${label.replace(" note", "-note")} triplet`;
+        return this.dotted ? `dotted ${label}` : label;
+    }
+
+    refreshMode() {
+        if (!this.modeEl) return;
+        this.modeEl.textContent = this.modeText();
+        this.modeEl.classList.toggle("chord", Boolean(this.stacking));
     }
 
     renderKeyboard() {
@@ -723,20 +795,6 @@ export class Editor {
         return wrap;
     }
 
-    refreshCount() {
-        if (!this.count) return;
-
-        const total = this.score.notes.length;
-        const last = this.score.notes.at(-1);
-        const stacked = (last?.midis ?? last?.drums ?? []).length;
-
-        this.count.textContent =
-            this.stacking && stacked > 1
-                ? `${total} notes, last is ${stacked} together`
-                : total === 1
-                  ? "1 note"
-                  : `${total} notes`;
-    }
 }
 
 function el(tag, className, text, children) {

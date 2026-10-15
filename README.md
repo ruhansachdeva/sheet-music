@@ -116,7 +116,7 @@ camera.
 
 **On a laptop** — the writer takes the keyboard: A–G for notes, ↑ ↓ for the
 octave, 1 2 4 8 6 for whole to sixteenth (the fraction of a whole note), `.`
-for a dot, R for a rest, S for stack, Backspace to undo or delete, Esc to stop
+for a dot, R for a rest, S for chord, Backspace to undo or delete, Esc to stop
 editing a note.
 
 **Fixing a note** — every note you write appears as a chip in a strip above the
@@ -129,11 +129,14 @@ end.
 of the chosen value: three in the time of two, drawn under a bracket. Press it
 again to go back. It works on a selected note too, and `3` on a keyboard.
 
-**Chords** — press **Stack**, then tap the notes that belong together: the first
+**Chords** — press **Chord**, then tap the notes that sound together: the first
 starts a new chord at the chosen length, and each one after it joins that chord
-rather than following it. Press it again to go back to writing one note at a
-time. To add a note to a chord already written, select it in the strip first. It works on the kit too, for a kick and a hi-hat on
-the same beat.
+rather than following it. **Next chord** finishes that chord and starts
+another, so a progression is Chord, C E G, Next chord, F A C, and so on. Press
+**Chord** again to go back to writing one note at a time. A line under the
+buttons always says what a tap will do. To add a note to a chord already
+written, select it and turn on Chord. It works on the kit too, for a kick and
+a hi-hat on the same beat.
 
 **Writing drums** — pick **Drums** before pressing **Write it yourself**, and
 the keyboard becomes the kit: hi-hat, open hat, ride, crash, three toms, snare
