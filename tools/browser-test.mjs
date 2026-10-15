@@ -377,6 +377,46 @@ async function run() {
             true,
         );
 
+        // --- the highlighted notes are the sounding notes -------------------
+        // The weaker check above only proves *something* lights up. This walks
+        // every cursor step and compares the notes under the cursor with the
+        // notes the player starts at that step - the check that would have
+        // caught the highlight running one note ahead of the audio.
+        console.log("\nhighlight follows the sound");
+        for (const sample of ["twinkle.musicxml", "timing-test.musicxml", "drum-groove.musicxml"]) {
+            await loadSample(page, sample);
+            const result = await page.evaluate(`
+                const s = window.sheetMusic.score;
+                const tl = window.sheetMusic.timeline;
+                const off = opensheetmusicdisplay.Pitch.OctaveXmlDifference;
+                const midiOf = (n) =>
+                    (n.Pitch.Octave + off + 1) * 12 + n.Pitch.FundamentalNote + n.Pitch.AccidentalHalfTones;
+                // A tied continuation sits under the cursor but does not sound
+                // again, so it is not expected among the notes that start here.
+                const starts = (n) => !n.isRest() && !(n.NoteTie && n.NoteTie.StartNote !== n);
+
+                let wrong = 0;
+                let first = null;
+                for (let k = 0; k < tl.steps.length; k++) {
+                    s.showStep(k);
+                    const lit = s.osmd.cursor.NotesUnderCursor().filter(starts).map(midiOf).sort((a, b) => a - b);
+                    const sounding = tl.notes.filter((n) => n.step === k).map((n) => n.midi).sort((a, b) => a - b);
+                    if (JSON.stringify(lit) !== JSON.stringify(sounding)) {
+                        wrong += 1;
+                        first ??= "step " + k + ": sounds " + sounding + ", lit " + lit;
+                    }
+                }
+                s.reset();
+                return { steps: tl.steps.length, wrong, first };
+            `);
+            check(
+                `${sample}: all ${result.steps} steps light the notes being played`,
+                result.wrong,
+                0,
+            );
+            if (result.first) console.log(`       first mismatch - ${result.first}`);
+        }
+
         // --- transposition and drum naming (pure functions) -----------------
         console.log("\ntransposing instruments");
         const transposed = await page.evaluate(`
