@@ -519,6 +519,40 @@ async function run() {
         check("Done closes the writer", edited.closed, true);
         check("and it can be reopened", edited.canReopen, true);
 
+        // --- stacking notes into chords --------------------------------------
+        console.log("\nchords");
+        const chords = await page.evaluate(`
+            window.sheetMusic.editor.clear();
+            // Pick the length explicitly: an earlier section leaves a half
+            // note selected, and this check is about onsets.
+            document.querySelectorAll(".length")[2].click();
+            const key = (n) => [...document.querySelectorAll(".key")]
+                .find((k) => k.getAttribute("aria-label") === n);
+            const action = (t) => [...document.querySelectorAll(".editor-actions button")]
+                .find((b) => b.textContent === t);
+
+            action("Stack").click();
+            key("C4").click();
+            key("E4").click();
+            key("G4").click();
+            action("Stack").click();
+            key("D4").click();
+            await new Promise((r) => setTimeout(r, 500));
+
+            const timeline = window.sheetMusic.timeline;
+            const xml = window.sheetMusic.editor.toMusicXml();
+            return {
+                written: window.sheetMusic.editor.score.notes.length,
+                midis: timeline.notes.map((n) => n.midi),
+                onsets: timeline.notes.map((n) => Math.round(n.time * 100) / 100),
+                chordTags: xml.split("<chord" + "/>").length - 1,
+            };
+        `);
+        check("three taps make one chord, not three notes", chords.written, 2);
+        check("all of its pitches are there", chords.midis, [60, 64, 67, 62]);
+        check("and they sound together", chords.onsets, [0, 0, 0, 0.6]);
+        check("written as a chord", chords.chordTags, 2);
+
         // --- writing drums ---------------------------------------------------
         console.log("\nwriting drums");
         const kitWriting = await page.evaluate(`
@@ -556,6 +590,30 @@ async function run() {
         check("as unpitched notes", kitWriting.unpitched, true);
         check("mapped to channel 10", kitWriting.channelTen, true);
         check("with cross noteheads for cymbals", kitWriting.crossNotehead, true);
+
+        // A kick and a hi-hat on the same beat is the ordinary case on a kit.
+        const stackedKit = await page.evaluate(`
+            window.sheetMusic.editor.clear();
+            const pad = (name) =>
+                [...document.querySelectorAll(".pad")].find((p) => p.textContent === name);
+            const action = (t) => [...document.querySelectorAll(".editor-actions button")]
+                .find((b) => b.textContent === t);
+
+            action("Stack").click();
+            pad("Kick").click();
+            pad("Hi-hat").click();
+            await new Promise((r) => setTimeout(r, 500));
+
+            const timeline = window.sheetMusic.timeline;
+            return {
+                written: window.sheetMusic.editor.score.notes.length,
+                drumKeys: timeline.notes.map((n) => n.drumKey),
+                onsets: timeline.notes.map((n) => Math.round(n.time * 100) / 100),
+            };
+        `);
+        check("a kick and a hat stack into one beat", stackedKit.written, 1);
+        check("both pieces sound", stackedKit.drumKeys, [36, 42]);
+        check("at the same moment", stackedKit.onsets, [0, 0]);
 
         await page.evaluate(`
             window.sheetMusic.editor.clear();

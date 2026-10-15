@@ -84,14 +84,29 @@ export function spellMidi(midi, prefer = SHARP) {
     return { step, alter, octave };
 }
 
+/** The pitches or kit pieces a note sounds, in the order they are written. */
+function pitchesOf(note) {
+    if (note.drums?.length) {
+        return note.drums.map((gm) => {
+            const piece = KIT.find((k) => k.gm === gm);
+            return { drum: piece ? { ...spellMidi(piece.staff), ...piece } : null };
+        });
+    }
+    const midis = note.midis?.length ? note.midis : [note.midi];
+    return midis.map((midi) => ({ pitch: spellMidi(midi, note.prefer ?? SHARP) }));
+}
+
 function escapeXml(text) {
     return String(text).replace(/[<>&'"]/g, (c) =>
         ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[c],
     );
 }
 
-function noteXml({ part, pitch, drum, tieStart, tieStop, clef }) {
+function noteXml({ part, pitch, drum, chord, tieStart, tieStop, clef }) {
     const lines = ["      <note>"];
+
+    // Marks this as sounding with the note before it rather than after it.
+    if (chord) lines.push("        <chord/>");
 
     if (drum) {
         // An unpitched note says where it sits on the staff, and points at the
@@ -161,18 +176,23 @@ export function toMusicXml(score) {
             for (const [index, part] of parts.entries()) {
                 const isLast = index === parts.length - 1;
 
-                const piece = note.drum != null ? KIT.find((k) => k.gm === note.drum) : null;
+                // A chord is one note followed by the rest of its pitches,
+                // each marked as sounding with it rather than after it.
+                const voices = note.rest ? [null] : pitchesOf(note);
 
-                current.push({
-                    part: { ...part, ticks: ticksOf(part) },
-                    drum: piece && !note.rest ? { ...spellMidi(piece.staff), ...piece } : null,
-                    pitch: note.rest || piece ? null : spellMidi(note.midi, note.prefer ?? SHARP),
-                    // Every piece of a split note is tied to the next, and to
-                    // the one before it. A rest is never tied.
-                    tieStart: !note.rest && (!isLast || spansMore),
-                    tieStop: !note.rest && !first,
-                    clef: score.clef,
-                });
+                for (const [voiceIndex, voice] of voices.entries()) {
+                    current.push({
+                        part: { ...part, ticks: ticksOf(part) },
+                        drum: voice?.drum ?? null,
+                        pitch: voice?.pitch ?? null,
+                        chord: voiceIndex > 0,
+                        // Every piece of a split note is tied to the next, and
+                        // to the one before it. A rest is never tied.
+                        tieStart: !note.rest && (!isLast || spansMore),
+                        tieStop: !note.rest && !first,
+                        clef: score.clef,
+                    });
+                }
                 first = false;
             }
 
@@ -206,7 +226,9 @@ export function toMusicXml(score) {
 
     // One score-instrument per drum actually used, each naming its General
     // MIDI number so the player knows which kit piece to sound.
-    const used = [...new Set(score.notes.filter((n) => !n.rest && n.drum != null).map((n) => n.drum))];
+    const used = [
+        ...new Set(score.notes.filter((n) => !n.rest).flatMap((n) => n.drums ?? [])),
+    ];
     const kitXml = used
         .map(
             (gm) => `      <score-instrument id="P1-I${gm}">

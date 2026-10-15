@@ -114,6 +114,11 @@ phone there is a **Take a photo** button as well, which opens the rear camera
 directly rather than the photo library. It only appears on devices that have a
 camera.
 
+**Chords** — press **Stack**, then tap the notes that belong together: each one
+joins the note before it rather than following it. Press it again to go back to
+writing one note at a time. It works on the kit too, for a kick and a hi-hat on
+the same beat.
+
 **Writing drums** — pick **Drums** before pressing **Write it yourself**, and
 the keyboard becomes the kit: hi-hat, open hat, ride, crash, three toms, snare
 and kick. It writes unpitched notes on a percussion staff with cross noteheads

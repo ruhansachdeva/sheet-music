@@ -331,6 +331,24 @@ export class Player {
         });
     }
 
+    /**
+     * Gets the sound ready before it is needed. The writer calls this when it
+     * opens, so the first key tapped is not silent while samples download.
+     */
+    async warmUp() {
+        const ctx = this.audioContext();
+        if (ctx.state === "suspended") await ctx.resume().catch(() => {});
+        if (INSTRUMENTS[this.instrumentKey]?.drums) await this.loadDrums();
+        else if (!this.melodic) await this.setInstrument(this.instrumentKey);
+    }
+
+    /** True once there is something loaded that can make a sound. */
+    get ready() {
+        return INSTRUMENTS[this.instrumentKey]?.drums
+            ? Boolean(this.drumMachine)
+            : Boolean(this.melodic);
+    }
+
     /** Sounds one kit piece, for the writer's drum pads. */
     async previewDrum(gmKey) {
         const ctx = this.audioContext();
