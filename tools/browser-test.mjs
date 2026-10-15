@@ -605,6 +605,45 @@ async function run() {
         await page.evaluate(`document.getElementById("write-music").click();`);
         await new Promise((r) => setTimeout(r, 300));
 
+        // --- on a laptop the writer is a panel beside the score ---------------
+        console.log("\nwriting on a laptop");
+        await page.send("Emulation.setDeviceMetricsOverride", {
+            width: 1280, height: 800, deviceScaleFactor: 1, mobile: false,
+        });
+        const laptop = await page.evaluate(`
+            document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 300));
+            const editor = window.sheetMusic.editor;
+            editor.stacking = false;
+            editor.clear();
+            const key = (n) => [...document.querySelectorAll(".key")]
+                .find((k) => k.getAttribute("aria-label") === n);
+            for (const n of ["C4", "E4", "G4", "E4"]) { key(n).click(); await new Promise((r) => setTimeout(r, 60)); }
+            await new Promise((r) => setTimeout(r, 800));
+
+            const panel = document.getElementById("editor").getBoundingClientRect();
+            const score = document.querySelector("#score svg").getBoundingClientRect();
+            const keyboard = document.querySelector(".keyboard").getBoundingClientRect();
+            const out = {
+                placement: getComputedStyle(document.getElementById("editor")).position,
+                panelBesideScore: panel.left >= score.right - 1,
+                scoreInView: score.top < innerHeight && score.bottom > 0,
+                panelFitsWindow: panel.bottom <= innerHeight + 1,
+                keyboardWidth: Math.round(keyboard.width),
+            };
+            editor.clear();
+            document.querySelector(".editor-head .primary").click();
+            return out;
+        `);
+        await page.send("Emulation.clearDeviceMetricsOverride");
+        check("the writer is a panel that stays put", laptop.placement, "sticky");
+        check("beside the score, not above it", laptop.panelBesideScore, true);
+        check("so the score being written is in view", laptop.scoreInView, true);
+        check("and the whole panel fits the window", laptop.panelFitsWindow, true);
+        check("with a keyboard of sensible width", laptop.keyboardWidth <= 420, true);
+        await page.evaluate(`document.getElementById("write-music").click();`);
+        await new Promise((r) => setTimeout(r, 300));
+
         // --- the key pressed is the note written -----------------------------
         console.log("\nspelling and key signatures");
         const spelling = await page.evaluate(`
