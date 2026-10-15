@@ -184,7 +184,8 @@ otherwise gone on reload.
 **Size** — the *Size* slider re-engraves the score between 50% and 200%, keeping
 the cursor where it was. It stretches the piano roll instead for a MIDI file.
 
-Keyboard: space plays and pauses. The instrument you pick is remembered for next
+Keyboard: space plays and pauses - except on a button you have moved to with
+Tab, which it presses, as it does on any web page. The instrument you pick is remembered for next
 time.
 
 ## Automated checks
