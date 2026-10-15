@@ -495,7 +495,7 @@ async function showScore(content, label, { written = false } = {}) {
 
     timeline = await score.load(content);
     view = score;
-    ready(score.title || label, timeline);
+    ready(score.title || label, timeline, transposeNote(timeline.transposedBy));
 }
 
 /**
@@ -505,6 +505,15 @@ async function showScore(content, label, { written = false } = {}) {
 function showingSomethingElse() {
     writtenOnScreen = false;
     ui.editScore.hidden = true;
+}
+
+/** What the status line says about a score that sets its own transposition. */
+function transposeNote(semitones) {
+    if (!semitones) return null;
+    const amount = Math.abs(semitones);
+    const size = amount === 12 ? "an octave" : `${amount} semitone${amount === 1 ? "" : "s"}`;
+    return `the score sounds ${size} ${semitones < 0 ? "lower" : "higher"} than written, ` +
+        "and plays that way whatever instrument is picked";
 }
 
 async function showPianoRoll(arrayBuffer, label) {
