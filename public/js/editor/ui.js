@@ -740,7 +740,9 @@ export class Editor {
             }
             return `Chord ${chipLabel(last)}: tap to add more. Next chord starts another.`;
         }
-        return `Tap a ${what} to add a ${this.lengthLabel()}. For ${drums ? "drums" : "notes"} that ${together}, press Chord.`;
+        const length = this.lengthLabel();
+        const article = /^[aeiou]/i.test(length) ? "an" : "a"; // an eighth, a quarter
+        return `Tap a ${what} to add ${article} ${length}. For ${drums ? "drums" : "notes"} that ${together}, press Chord.`;
     }
 
     /** The chosen length in words, e.g. "dotted quarter note" or "eighth-note triplet". */

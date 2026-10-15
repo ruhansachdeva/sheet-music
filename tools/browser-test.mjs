@@ -1119,6 +1119,18 @@ async function run() {
         check("and which chord is being built", chords.said.building,
             "Chord C4·E4: tap to add more. Next chord starts another.");
         check("and when it is off again", chords.said.off, chords.said.before);
+        const eighths = await page.evaluate(`
+            const length = (name) => [...document.querySelectorAll(".length")]
+                .find((b) => b.getAttribute("aria-label") === name);
+            length("eighth note").click();
+            const plain = document.querySelector(".editor-mode").textContent;
+            length("Triplet").click();
+            const triplet = document.querySelector(".editor-mode").textContent;
+            length("Triplet").click();
+            length("quarter note").click();
+            return [plain, triplet].map((s) => s.split(".")[0]);
+        `);
+        check("it is an eighth, not a eighth", eighths, ["Tap a key to add an eighth note", "Tap a key to add an eighth-note triplet"]);
         check("Next chord appears only once a chord has a note",
             [chords.said.nextBefore, chords.said.nextOn, chords.said.nextBuilding], [false, false, true]);
 
