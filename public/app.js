@@ -75,7 +75,7 @@ const editor = new Editor(ui.editor, {
     onPreviewDrum: (gm) => player.previewDrum(gm).catch(reportError),
     onClose: () => {
         setStatus("Saved. Press play to hear it.", "info");
-        ui.editScore.hidden = false;
+        ui.editScore.hidden = !writtenOnScreen;
         document.body.classList.remove("writing");
     },
 });
@@ -153,7 +153,7 @@ async function showWrittenScore() {
     sourceFile = null;
     questionPanel.hide();
     try {
-        await showScore(editor.toMusicXml(), editor.score.title);
+        await showScore(editor.toMusicXml(), editor.score.title, { written: true });
         if (noticeAfterRender) {
             setStatus(noticeAfterRender, "info");
             noticeAfterRender = null;
@@ -169,6 +169,9 @@ async function showWrittenScore() {
 /** What is on screen: a rendered score, or a piano roll for a MIDI file. */
 let view = null;
 let timeline = null;
+/** Whether the score on screen is the one in the writer, rather than a
+ *  file, a sample or a reading - only that one can be edited. */
+let writtenOnScreen = false;
 
 /** The status line: what kind of message it is showing, and the last summary of
  *  the loaded piece, which a passing "busy" message is restored to. */
@@ -449,9 +452,14 @@ async function loadSample(name) {
     }
 }
 
-/** Renders MusicXML (a string, or a Blob for .mxl) and makes it playable. */
-async function showScore(content, label) {
+/**
+ * Renders MusicXML (a string, or a Blob for .mxl) and makes it playable.
+ * `written` says it is the writer's score, which is known before it renders.
+ */
+async function showScore(content, label, { written = false } = {}) {
     setStatus("Rendering the score…", "busy");
+    if (written) writtenOnScreen = true;
+    else showingSomethingElse();
     if (typeof content === "string") currentMusicXml = content;
 
     ui.roll.hidden = true;
@@ -463,8 +471,18 @@ async function showScore(content, label) {
     ready(score.title || label, timeline);
 }
 
+/**
+ * Anything newly put on screen is not the written score until shown to be,
+ * so Edit goes - it would otherwise reopen the old written score over it.
+ */
+function showingSomethingElse() {
+    writtenOnScreen = false;
+    ui.editScore.hidden = true;
+}
+
 async function showPianoRoll(arrayBuffer, label) {
     setStatus("Reading the MIDI file…", "busy");
+    showingSomethingElse();
     sourceFile = null;
     questionPanel.hide();
 
