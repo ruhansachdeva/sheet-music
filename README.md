@@ -129,9 +129,10 @@ end.
 of the chosen value: three in the time of two, drawn under a bracket. Press it
 again to go back. It works on a selected note too, and `3` on a keyboard.
 
-**Chords** — press **Stack**, then tap the notes that belong together: each one
-joins the note before it rather than following it. Press it again to go back to
-writing one note at a time. It works on the kit too, for a kick and a hi-hat on
+**Chords** — press **Stack**, then tap the notes that belong together: the first
+starts a new chord at the chosen length, and each one after it joins that chord
+rather than following it. Press it again to go back to writing one note at a
+time. To add a note to a chord already written, select it in the strip first. It works on the kit too, for a kick and a hi-hat on
 the same beat.
 
 **Writing drums** — pick **Drums** before pressing **Write it yourself**, and
