@@ -155,8 +155,10 @@
         <!-- Hidden with the attribute, not with CSS: OSMD measures this
              container to lay the score out, and a display:none container
              would make it render zero pixels wide. -->
-        <section id="score" class="score" hidden></section>
-        <section id="roll" class="roll" hidden></section>
+        <!-- Focusable so a keyboard can scroll it when the engraving is wider
+             than the card: the SVG inside has nothing that takes focus. -->
+        <section id="score" class="score" hidden tabindex="0" role="region" aria-label="Score"></section>
+        <section id="roll" class="roll" hidden tabindex="0" role="region" aria-label="Piano roll"></section>
     </main>
 
     <script type="module" src="app.js"></script>
