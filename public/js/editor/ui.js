@@ -93,17 +93,33 @@ export class Editor {
         // The note being edited, by index, or null when adding at the end.
         this.selected = null;
         this.history = [];
+        // The score of the other kind - pitched or drums - while this one is
+        // being written, by kind.
+        this.parked = {};
     }
 
     get isOpen() {
         return !this.container.hidden;
     }
 
-    /** Switches between writing pitches and writing drums. */
-    setKind(kind) {
+    /**
+     * Switches between writing pitches and writing drums. Each kind keeps its
+     * own score: the one being left is parked, and the other comes back -
+     * parked earlier this session, or `saved` (its stored draft), or new - so
+     * switching to drums and back never throws away what was written.
+     */
+    setKind(kind, saved = null) {
         if (kind === this.score.kind) return;
-        this.score = { ...emptyScore(kind), title: this.score.title, tempo: this.score.tempo,
-            beats: this.score.beats, beatType: this.score.beatType };
+        this.parked[this.score.kind] = this.score;
+        this.score = this.parked[kind] ?? (saved ? structuredClone(saved) : {
+            ...emptyScore(kind),
+            title: this.score.title,
+            tempo: this.score.tempo,
+            beats: this.score.beats,
+            beatType: this.score.beatType,
+        });
+        this.selected = null;
+        this.stacking = false;
         this.history = [];
         if (this.isOpen) {
             this.render();
