@@ -6,6 +6,7 @@
 // tempo slider works even when the score changes tempo part-way through.
 
 import { gmKeyFromStaffPosition } from "./drums.js";
+import { readTempoMap } from "./tempo.js";
 
 const DEFAULT_BPM = 100;
 
@@ -178,6 +179,9 @@ export class Score {
 
         this.applyResponsiveOptions();
         await this.osmd.load(content);
+        // Tempo is read from the text: OSMD misreads metronome marks in
+        // anything but quarter notes, and rounds the rest (see tempo.js).
+        this.tempos = typeof content === "string" ? readTempoMap(content) : null;
         // A lone part's name beside the staff only repeats the title above it.
         if (this.osmd.Sheet.Instruments.length < 2 && this.showingPartNames) {
             this.osmd.setOptions({ drawPartNames: false, drawPartAbbreviations: false });
@@ -205,8 +209,16 @@ export class Score {
      */
     buildTimeline() {
         const sheet = this.osmd.Sheet;
-        const scoreBpm = sheet.HasBPMInfo ? Math.round(sheet.DefaultStartTempoInBpm) : null;
-        const fallbackBpm = scoreBpm || DEFAULT_BPM;
+        const tempos = this.tempos;
+        // OSMD's own reading of the tempo, used only without a tempo map.
+        const osmdBpm = sheet.HasBPMInfo ? Math.round(sheet.DefaultStartTempoInBpm) : null;
+        const osmdFallback = osmdBpm || DEFAULT_BPM;
+        // From the tempo map: the tempo now, the changes still to come in
+        // this measure, and the tempo the piece starts at (null if unmarked).
+        let marked = null;
+        let pending = [];
+        let startBpm;
+        let lastBpm = null;
 
         this.osmd.cursor.reset();
         const iterator = this.osmd.cursor.iterator.clone();
@@ -221,24 +233,39 @@ export class Score {
         let guard = 0;
 
         while (!iterator.EndReached && guard++ < 200000) {
-            const bpm = iterator.CurrentBpm || fallbackBpm;
             const measure = iterator.CurrentMeasure;
+            const intoMeasure = iterator.CurrentRelativeInMeasureTimestamp?.RealValue ?? 0;
 
             // A new measure starts here (or the same measure again, on a repeat).
             const measureKey = `${iterator.CurrentMeasureIndex}:${iterator.CurrentRepetitionIteration}`;
-            if (measureKey !== lastMeasureKey) {
+            const newMeasure = measureKey !== lastMeasureKey;
+            if (tempos && newMeasure) {
+                // A mark after a measure's last note still holds from the next.
+                for (const event of pending) marked = event.bpm;
+                pending = [...(tempos.get(iterator.CurrentMeasureIndex) ?? [])];
+            }
+            while (pending.length && pending[0].at <= intoMeasure + 1e-9) marked = pending.shift().bpm;
+            const bpm = tempos ? marked ?? DEFAULT_BPM : iterator.CurrentBpm || osmdFallback;
+            if (startBpm === undefined) startBpm = tempos ? marked : osmdBpm;
+
+            if (newMeasure) {
                 lastMeasureKey = measureKey;
-                const intoMeasure = iterator.CurrentRelativeInMeasureTimestamp?.RealValue ?? 0;
+                const start = time - toSeconds(intoMeasure, bpm);
                 measures.push({
-                    time: time - toSeconds(intoMeasure, bpm),
+                    time: start,
                     number: measure.MeasureNumber,
                     beats: measure.ActiveTimeSignature.Numerator,
                     beatLength: 1 / measure.ActiveTimeSignature.Denominator,
                     lengthWhole: measure.Duration.RealValue,
                     timeSignatureWhole: measure.ActiveTimeSignature.RealValue,
                     bpm,
+                    // Where the tempo changes within the measure, for the clicks.
+                    segments: [{ at: 0, time: start, bpm }],
                 });
+            } else if (bpm !== lastBpm) {
+                measures.at(-1).segments.push({ at: intoMeasure, time, bpm });
             }
+            lastBpm = bpm;
 
             // cursor.next() stops only on positions with something visible, so
             // the cursor steps are exactly those positions.
@@ -283,6 +310,8 @@ export class Score {
         }
 
         const duration = Math.max(time, ...notes.map((n) => n.time + n.duration), 0);
+        const scoreBpm = startBpm ?? null;
+        const fallbackBpm = scoreBpm ?? DEFAULT_BPM;
 
         return {
             scoreBpm,
@@ -426,8 +455,10 @@ function beatGrid(measures) {
         for (let i = 0; i < measure.beats; i++) {
             const offset = i * measure.beatLength;
             if (offset >= measure.lengthWhole - 1e-6) break; // pickup: stop at the barline
+            // From the last tempo change at or before the beat, at that tempo.
+            const segment = measure.segments.findLast((s) => s.at <= offset + 1e-9);
             beats.push({
-                time: measure.time + toSeconds(offset, measure.bpm),
+                time: segment.time + toSeconds(offset - segment.at, segment.bpm),
                 accent: i === 0 && isFullBar,
             });
         }
