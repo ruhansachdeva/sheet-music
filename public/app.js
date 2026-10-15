@@ -110,12 +110,48 @@ function revealNewest() {
     window.scrollBy({ top: bottom - room, behavior: "smooth" });
 }
 
+/**
+ * A draft is kept in the browser's own storage as you write, one for pitched
+ * music and one for drums, so a reload - or a phone discarding the tab while
+ * you were in another app - does not throw the work away. Storage can be
+ * missing or full (private browsing), so every access is guarded.
+ */
+/** A message to show once the next render of the written score is done, so
+ *  the render's own status line does not immediately replace it. */
+let noticeAfterRender = null;
+
+function draftKey(kind) {
+    return `draft:${kind}`;
+}
+
+function saveDraft(written) {
+    try {
+        localStorage.setItem(draftKey(written.kind ?? "pitched"), JSON.stringify(written));
+    } catch {
+        // Not being able to save the draft must not stop the writing.
+    }
+}
+
+function loadDraft(kind) {
+    try {
+        const saved = JSON.parse(localStorage.getItem(draftKey(kind)) ?? "null");
+        return saved?.notes?.length ? saved : null;
+    } catch {
+        return null;
+    }
+}
+
 async function showWrittenScore() {
+    saveDraft(editor.score);
     player.stop();
     sourceFile = null;
     questionPanel.hide();
     try {
         await showScore(editor.toMusicXml(), editor.score.title);
+        if (noticeAfterRender) {
+            setStatus(noticeAfterRender, "info");
+            noticeAfterRender = null;
+        }
         // Re-engraving clears the highlight, so put the selected note's back.
         highlightWritten(editor.selectedOnset());
         if (editor.selected === null) revealNewest();
@@ -212,7 +248,15 @@ ui.chooseFile.addEventListener("click", () => ui.file.click());
 ui.writeMusic.addEventListener("click", () => {
     ui.editScore.hidden = true;
     document.body.classList.add("writing");
-    editor.open(null, writingKind());
+
+    // Pick up where you left off, and say so - Clear starts a fresh one.
+    const draft = loadDraft(writingKind());
+    if (draft) {
+        const count = draft.notes.length;
+        noticeAfterRender =
+            `Picked up your draft, ${count} ${count === 1 ? "note" : "notes"}. Clear starts a new one.`;
+    }
+    editor.open(draft, writingKind());
     // Fetch the samples now, so the first key tapped actually sounds.
     player.warmUp().catch(reportError);
 });

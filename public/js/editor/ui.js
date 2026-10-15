@@ -114,7 +114,10 @@ export class Editor {
         // to open or fold them sticks.
         this.settingsOpen = window.matchMedia?.("(min-width: 700px)").matches ?? true;
         this.score = score ? structuredClone(score) : emptyScore(kind);
+        // Each time the writer opens it starts in a predictable state, rather
+        // than still stacking chords from the last session.
         this.selected = null;
+        this.stacking = false;
         this.history = [];
         this.render();
         this.container.hidden = false;

@@ -919,6 +919,48 @@ async function run() {
         check("an unreadable file reports an error", rejected.kind.includes("error"), true);
         check("and says so in the status", rejected.text.length > 0, true, rejected.text);
 
+        // --- a draft survives a reload ---------------------------------------
+        console.log("\ndrafts survive a reload");
+        await page.evaluate(`
+            const editor = window.sheetMusic.editor;
+            if (document.getElementById("editor").hidden) document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 300));
+            if (editor.selected !== null) editor.select(editor.selected);
+            // An earlier section leaves Stack on; this one writes single notes.
+            editor.stacking = false;
+            editor.clear();
+            const key = (n) => [...document.querySelectorAll(".key")]
+                .find((k) => k.getAttribute("aria-label") === n);
+            for (const n of ["C4", "E4", "G4"]) { key(n).click(); await new Promise((r) => setTimeout(r, 60)); }
+            const title = document.querySelector(".editor-title");
+            title.value = "Survives";
+            title.dispatchEvent(new Event("input"));
+            await new Promise((r) => setTimeout(r, 500));
+        `);
+        await page.send("Page.reload", { ignoreCache: true });
+        await new Promise((r) => setTimeout(r, 600));
+        await waitFor(() => page.evaluate("return Boolean(window.sheetMusic)"), {
+            what: "the app to boot again",
+        });
+        const restored = await page.evaluate(`
+            document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 900));
+            const out = {
+                chips: [...document.querySelectorAll(".chip")].map((c) => c.textContent),
+                title: document.querySelector(".editor-title").value,
+                said: document.getElementById("status").textContent,
+            };
+            window.sheetMusic.editor.clear();
+            await new Promise((r) => setTimeout(r, 400));
+            out.savedAfterClear = JSON.parse(localStorage.getItem("draft:pitched") ?? "{}").notes?.length ?? 0;
+            document.querySelector(".editor-head .primary").click();
+            return out;
+        `);
+        check("the notes written come back after a reload", restored.chips, ["C4", "E4", "G4"]);
+        check("with their title", restored.title, "Survives");
+        check("and it says so", /Picked up your draft, 3 notes/.test(restored.said), true);
+        check("Clear starts a fresh draft", restored.savedAfterClear, 0);
+
         // --- optional: real playback ----------------------------------------
         if (WITH_AUDIO) {
             // The checks above leave whatever they loaded last on screen - the
