@@ -297,7 +297,7 @@ export class Player {
 
         if (!this.melodic) return;
         const stop = this.melodic.start({
-            note: concertPitch(note.midi, this.instrumentKey, this.transposeEnabled),
+            note: concertPitch(note.midi, this.instrumentKey, this.transposeEnabled, note.transpose),
             time: when,
             duration: note.duration * this.scale,
             velocity: note.velocity ?? 100,
