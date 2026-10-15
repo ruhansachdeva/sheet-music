@@ -69,13 +69,34 @@ const questionPanel = new QuestionPanel(ui.questions, { onSubmit: sendAnswers })
 // what you are writing as you write it.
 const editor = new Editor(ui.editor, {
     onChange: (written) => showWrittenScore(written),
+    onPlay: () => Promise.resolve(player.toggle()).catch(reportError),
     onPreview: (midi) => player.preview(midi).catch(reportError),
     onPreviewDrum: (gm) => player.previewDrum(gm).catch(reportError),
     onClose: () => {
         setStatus("Saved. Press play to hear it.", "info");
         ui.editScore.hidden = false;
+        document.body.classList.remove("writing");
     },
 });
+
+// On a phone the writer is a sheet docked to the bottom, like a keyboard. The
+// page reserves its height so the score can always scroll clear of it.
+new ResizeObserver(() => {
+    const height = ui.editor.hidden ? 0 : ui.editor.offsetHeight;
+    document.documentElement.style.setProperty("--sheet-height", `${height}px`);
+}).observe(ui.editor);
+
+/** Scrolls so the newest notes sit just above the writer's sheet. */
+function revealNewest() {
+    if (!document.body.classList.contains("writing")) return;
+    const sheet = ui.editor.offsetHeight;
+    const docked = getComputedStyle(ui.editor).position === "fixed";
+    if (!docked) return; // wide screens keep the writer in the page
+
+    const bottom = ui.score.getBoundingClientRect().bottom;
+    const room = window.innerHeight - sheet - 12;
+    window.scrollBy({ top: bottom - room, behavior: "smooth" });
+}
 
 async function showWrittenScore() {
     player.stop();
@@ -83,6 +104,7 @@ async function showWrittenScore() {
     questionPanel.hide();
     try {
         await showScore(editor.toMusicXml(), editor.score.title);
+        revealNewest();
     } catch (error) {
         reportError(error);
     }
@@ -175,6 +197,7 @@ function writingKind() {
 ui.chooseFile.addEventListener("click", () => ui.file.click());
 ui.writeMusic.addEventListener("click", () => {
     ui.editScore.hidden = true;
+    document.body.classList.add("writing");
     editor.open(null, writingKind());
     // Fetch the samples now, so the first key tapped actually sounds.
     player.warmUp().catch(reportError);
@@ -183,6 +206,7 @@ ui.writeMusic.addEventListener("click", () => {
 // Go back into something you wrote, rather than starting again.
 ui.editScore.addEventListener("click", () => {
     ui.editScore.hidden = true;
+    document.body.classList.add("writing");
     editor.open(editor.score, editor.score.kind);
     player.warmUp().catch(reportError);
 });
@@ -562,6 +586,7 @@ function showPosition(time, step) {
 }
 
 function handleState(state) {
+    editor.setPlaying(state === "playing");
     ui.play.textContent = state === "playing" ? "Pause" : "Play";
     ui.play.classList.toggle("playing", state === "playing");
     if (state === "stopped") {
