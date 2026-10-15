@@ -83,6 +83,7 @@ export class Editor {
         this.octave = 4;
         this.duration = "quarter";
         this.dotted = false;
+        this.triplet = false;
         // Must start as a real boolean: classList.toggle(name, undefined)
         // toggles rather than forcing off, which drew Stack as switched on.
         this.stacking = false;
@@ -157,8 +158,7 @@ export class Editor {
         this.score.notes.push({
             midis: [midi],
             spell: { [midi]: prefer },
-            duration: this.duration,
-            dots: this.dotted ? 1 : 0,
+            ...this.length(),
         });
         this.changed();
     }
@@ -189,6 +189,9 @@ export class Editor {
         }
 
         switch (key) {
+            case "3":
+                this.toggleTriplet();
+                return true;
             case "ArrowUp":
             case "ArrowDown":
                 if (drums) return false;
@@ -228,6 +231,28 @@ export class Editor {
         if (note && note.duration !== name) {
             this.remember();
             note.duration = name;
+            this.changed();
+        }
+        this.render();
+    }
+
+    /** The length the next note gets: value, dot, and whether it is a triplet. */
+    length() {
+        return {
+            duration: this.duration,
+            dots: this.dotted ? 1 : 0,
+            ...(this.triplet ? { tuplet: 3 } : {}),
+        };
+    }
+
+    /** Toggles triplets; with a note selected, on that note. */
+    toggleTriplet() {
+        this.triplet = !this.triplet;
+        const note = this.selectedNote;
+        if (note) {
+            this.remember();
+            if (this.triplet) note.tuplet = 3;
+            else delete note.tuplet;
             this.changed();
         }
         this.render();
@@ -286,6 +311,7 @@ export class Editor {
         if (note) {
             this.duration = note.duration;
             this.dotted = Boolean(note.dots);
+            this.triplet = note.tuplet === 3;
         }
         this.render();
         this.onSelect?.(this.selectedOnset());
@@ -338,8 +364,7 @@ export class Editor {
         this.remember();
         this.score.notes.push({
             drums: [gm],
-            duration: this.duration,
-            dots: this.dotted ? 1 : 0,
+            ...this.length(),
         });
         this.changed();
     }
@@ -360,8 +385,7 @@ export class Editor {
         this.remember();
         this.score.notes.push({
             rest: true,
-            duration: this.duration,
-            dots: this.dotted ? 1 : 0,
+            ...this.length(),
         });
         this.changed();
     }
@@ -566,6 +590,15 @@ export class Editor {
         dot.addEventListener("click", () => this.toggleDot());
         lengths.appendChild(dot);
 
+        // Three in the time of two.
+        const triplet = el("button", "length triplet", "3");
+        triplet.title = "Triplet: three in the time of two";
+        triplet.setAttribute("aria-label", "Triplet");
+        triplet.setAttribute("aria-pressed", String(this.triplet));
+        triplet.classList.toggle("chosen", this.triplet);
+        triplet.addEventListener("click", () => this.toggleTriplet());
+        lengths.appendChild(triplet);
+
         const actions = el("div", "editor-actions");
 
         // Stacking is what turns a run of single notes into chords.
@@ -601,8 +634,8 @@ export class Editor {
             "p",
             "editor-keys-hint",
             this.score.kind === "drums"
-                ? "Keys: 1 2 4 8 6 lengths · . dot · R rest · S stack · ⌫ undo"
-                : "Keys: A–G notes · ↑↓ octave · 1 2 4 8 6 lengths · . dot · R rest · S stack · ⌫ undo",
+                ? "Keys: 1 2 4 8 6 lengths · . dot · 3 triplet · R rest · S stack · ⌫ undo"
+                : "Keys: A–G notes · ↑↓ octave · 1 2 4 8 6 lengths · . dot · 3 triplet · R rest · S stack · ⌫ undo",
         );
         palette.append(lengths, actions, hint);
         return palette;
@@ -704,7 +737,7 @@ function el(tag, className, text, children) {
 
 /** What a chip says: the pitches, the kit pieces, or "rest". */
 function chipLabel(note) {
-    const dot = note.dots ? "." : "";
+    const dot = (note.dots ? "." : "") + (note.tuplet === 3 ? "³" : "");
     if (note.rest) return `rest${dot}`;
     if (note.drums?.length) {
         return note.drums.map((gm) => KIT.find((k) => k.gm === gm)?.label ?? gm).join("+") + dot;

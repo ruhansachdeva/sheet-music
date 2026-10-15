@@ -689,6 +689,54 @@ async function run() {
         check("so the score holds the edited notes", edits.midis, [60, 69, 64, 67]);
         check("with the new length on the third", edits.durations, [0.6, 0.6, 1.2, 0.6]);
 
+        // --- triplets ---------------------------------------------------------
+        console.log("\ntriplets");
+        const triplets = await page.evaluate(`
+            const editor = window.sheetMusic.editor;
+            if (editor.selected !== null) editor.select(editor.selected);
+            editor.stacking = false;
+            editor.clear();
+            const key = (n) => [...document.querySelectorAll(".key")]
+                .find((k) => k.getAttribute("aria-label") === n);
+            const length = (name) => [...document.querySelectorAll(".length")]
+                .find((b) => b.getAttribute("aria-label") === name);
+
+            length("eighth note").click();
+            length("Triplet").click();
+            for (const n of ["C4", "D4", "E4"]) { key(n).click(); await new Promise((r) => setTimeout(r, 60)); }
+            length("Triplet").click();
+            length("quarter note").click();
+            key("F4").click();
+            length("half note").click();
+            key("G4").click();
+            await new Promise((r) => setTimeout(r, 600));
+
+            const t = window.sheetMusic.timeline;
+            const xml = editor.toMusicXml();
+            const round = (n) => Math.round(n * 1000) / 1000;
+            const out = {
+                chips: [...document.querySelectorAll(".chip")].map((c) => c.textContent),
+                onsets: t.notes.map((n) => round(n.time)),
+                durations: t.notes.map((n) => round(n.duration)),
+                timeModifications: xml.split("<time-modification>").length - 1,
+                brackets: xml.split('tuplet type="start"').length - 1,
+                // OSMD read them as tuplets, which is what draws the 3 over them
+                osmdTuplets: window.sheetMusic.score.osmd.Sheet.SourceMeasures[0]
+                    .VerticalSourceStaffEntryContainers.flatMap((c) => c.StaffEntries)
+                    .flatMap((e) => e?.VoiceEntries ?? []).flatMap((v) => v.Notes)
+                    .filter((n) => n.NoteTuplet).length,
+            };
+            editor.clear();
+            return out;
+        `);
+        check("triplets are marked in the strip", triplets.chips, ["C4³", "D4³", "E4³", "F4", "G4"]);
+        // 100 BPM: a triplet eighth is a third of a beat, 0.2s.
+        check("three triplet eighths fill one beat", triplets.onsets, [0, 0.2, 0.4, 0.6, 1.2]);
+        check("each lasting a third of it", triplets.durations, [0.2, 0.2, 0.2, 0.6, 1.2]);
+        check("written as three in the time of two", triplets.timeModifications, 3);
+        check("under one bracket", triplets.brackets, 1);
+        check("and read back as a tuplet", triplets.osmdTuplets, 3);
+
         // --- stacking notes into chords --------------------------------------
         console.log("\nchords");
         const chords = await page.evaluate(`

@@ -20,16 +20,24 @@ export const DURATIONS = [
 const BY_NAME = Object.fromEntries(DURATIONS.map((d) => [d.name, d]));
 
 /** Ticks a note lasts, including its dot. */
-export function ticksOf({ duration, dots = 0 }) {
+export function ticksOf({ duration, dots = 0, tuplet = 0 }) {
     const base = BY_NAME[duration].ticks;
-    return dots ? base * 1.5 : base;
+    const dotted = dots ? base * 1.5 : base;
+    // A triplet is three in the time of two.
+    return tuplet === 3 ? (dotted * 2) / 3 : dotted;
 }
 
-/** Every writable length, longest first: each note type, dotted and plain. */
+/**
+ * Every writable length, longest first: each note type dotted and plain, and
+ * as a triplet. The triplets let a bar with a triplet in it still be filled
+ * exactly: without them a leftover like 160 ticks (one triplet eighth) cannot
+ * be written at all, and the bar would come up short.
+ */
 const WRITABLE = DURATIONS.flatMap((d) => [
-    { duration: d.name, dots: 1, ticks: d.ticks * 1.5 },
-    { duration: d.name, dots: 0, ticks: d.ticks },
-]).sort((a, b) => b.ticks - a.ticks);
+    { duration: d.name, dots: 1, tuplet: 0, ticks: d.ticks * 1.5 },
+    { duration: d.name, dots: 0, tuplet: 0, ticks: d.ticks },
+    { duration: d.name, dots: 0, tuplet: 3, ticks: (d.ticks * 2) / 3 },
+]).sort((a, b) => b.ticks - a.ticks || a.tuplet - b.tuplet);
 
 /**
  * Breaks a length into note values that can actually be written. A tie across
@@ -42,8 +50,12 @@ export function decompose(ticks) {
 
     while (left > 0) {
         const fits = WRITABLE.find((w) => w.ticks <= left + 1e-9);
-        if (!fits) break; // shorter than a 16th: not writable, so drop the rest
-        parts.push({ duration: fits.duration, dots: fits.dots });
+        if (!fits) break; // shorter than anything writable, so drop the rest
+        parts.push({
+            duration: fits.duration,
+            dots: fits.dots,
+            ...(fits.tuplet ? { tuplet: fits.tuplet } : {}),
+        });
         left -= fits.ticks;
     }
     return parts;
@@ -128,7 +140,13 @@ function escapeXml(text) {
     );
 }
 
-function noteXml({ part, pitch, drum, chord, tieStart, tieStop, clef }) {
+/**
+ * One <note>, with its children in the order the MusicXML schema requires:
+ * chord, pitch, duration, tie, instrument, voice, type, dot, time-modification,
+ * notehead, notations. Lenient readers accept them in any order; stricter ones
+ * (MuseScore among them) reject a file that gets it wrong.
+ */
+function noteXml({ part, pitch, drum, chord, tieStart, tieStop, tupletStart, tupletStop }) {
     const lines = ["      <note>"];
 
     // Marks this as sounding with the note before it rather than after it.
@@ -144,8 +162,6 @@ function noteXml({ part, pitch, drum, chord, tieStart, tieStop, clef }) {
     } else if (!pitch) {
         lines.push("        <rest/>");
     } else {
-        if (tieStop) lines.push('        <tie type="stop"/>');
-        if (tieStart) lines.push('        <tie type="start"/>');
         lines.push("        <pitch>");
         lines.push(`          <step>${pitch.step}</step>`);
         if (pitch.alter) lines.push(`          <alter>${pitch.alter}</alter>`);
@@ -154,21 +170,58 @@ function noteXml({ part, pitch, drum, chord, tieStart, tieStop, clef }) {
     }
 
     lines.push(`        <duration>${Math.round(part.ticks)}</duration>`);
+    if (tieStop) lines.push('        <tie type="stop"/>');
+    if (tieStart) lines.push('        <tie type="start"/>');
     if (drum) lines.push(`        <instrument id="P1-I${drum.gm}"/>`);
     lines.push("        <voice>1</voice>");
     lines.push(`        <type>${part.duration}</type>`);
     for (let i = 0; i < part.dots; i++) lines.push("        <dot/>");
+    if (part.tuplet === 3) {
+        // Three in the time of two.
+        lines.push("        <time-modification>");
+        lines.push("          <actual-notes>3</actual-notes>");
+        lines.push("          <normal-notes>2</normal-notes>");
+        lines.push("        </time-modification>");
+    }
     if (drum?.cross) lines.push("        <notehead>x</notehead>");
 
-    if (tieStart || tieStop) {
+    if (tieStart || tieStop || tupletStart || tupletStop) {
         lines.push("        <notations>");
         if (tieStop) lines.push('          <tied type="stop"/>');
         if (tieStart) lines.push('          <tied type="start"/>');
+        if (tupletStart) lines.push('          <tuplet type="start" bracket="yes"/>');
+        if (tupletStop) lines.push('          <tuplet type="stop"/>');
         lines.push("        </notations>");
     }
 
     lines.push("      </note>");
     return lines.join("\n");
+}
+
+/**
+ * Marks the start and end of each triplet bracket in a measure: every three
+ * consecutive triplet notes of the same value make one group. A group left
+ * short at the end of the bar is closed where it stops.
+ */
+function bracketTuplets(entries) {
+    let group = [];
+    const close = () => {
+        if (group.length) {
+            group[0].tupletStart = true;
+            group[group.length - 1].tupletStop = true;
+        }
+        group = [];
+    };
+
+    for (const entry of entries) {
+        if (entry.chord) continue; // a chord's other notes share its bracket
+        const isTriplet = entry.part.tuplet === 3;
+        if (!isTriplet || (group.length && group[0].part.duration !== entry.part.duration)) close();
+        if (!isTriplet) continue;
+        group.push(entry);
+        if (group.length === 3) close();
+    }
+    close();
 }
 
 /**
@@ -196,7 +249,13 @@ export function toMusicXml(score) {
             const room = perMeasure - filled;
             const take = Math.min(room, left);
 
-            const parts = decompose(take);
+            // A note that fits the bar whole is written as the value that was
+            // chosen - a triplet stays a triplet - and only a note split by
+            // the bar line is broken into whatever values add up.
+            const whole = first && take === ticksOf(note);
+            const parts = whole
+                ? [{ duration: note.duration, dots: note.dots ?? 0, ...(note.tuplet ? { tuplet: note.tuplet } : {}) }]
+                : decompose(take);
             const spansMore = left - take > 0;
 
             for (const [index, part] of parts.entries()) {
@@ -292,6 +351,7 @@ ${clefXml}
       </direction>
 `
                     : "";
+            bracketTuplets(notes);
             return `    <measure number="${index + 1}">\n${attributes}${notes
                 .map(noteXml)
                 .join("\n")}\n    </measure>`;
