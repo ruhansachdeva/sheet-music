@@ -60,16 +60,19 @@ const request = {
     file: { buffer: Buffer.from("x"), mimetype: "image/png" },
     schema: { type: "object" },
 };
-async function read(plan) {
+/** Reads once against the plan. `models` is GEMINI_MODEL, or the default. */
+async function read(plan, models = "") {
     script = plan;
     asked = {};
+    process.env.GEMINI_MODEL = models;
     try {
         const result = await gemini.generate(request);
         return { model: result.model, fallback: result.fallback, asked };
     } catch (error) {
-        return { error: error.status ?? error.message, asked };
+        return { error: error.status ?? error.message, message: error.message, asked };
     }
 }
+const WITH_LITE = "gemini-flash-latest, gemini-flash-lite-latest";
 
 try {
     console.log("\na busy model is waited for");
@@ -78,25 +81,37 @@ try {
     check("so no lighter model stood in", brief.fallback, false);
     check("and Flash-Lite was never asked", brief.asked["gemini-flash-lite-latest"] ?? 0, 0);
 
-    console.log("\nfor as long as patience allows, then a lighter one reads it");
+    console.log("\nfor as long as patience allows, then it says so");
     const long = await read({ "gemini-flash-latest": [503], "gemini-flash-lite-latest": [200] });
-    check("Flash-Lite answers once Flash has been busy too long", long.model, "gemini-flash-lite-latest");
-    check("and the reading says a lighter model stood in, and why", long.fallback, "busy");
-    check("after Flash was asked more than the old three retries", long.asked["gemini-flash-latest"] > 4, true);
+    check("a Flash busy too long fails as busy", long.error, 503);
+    check("after being asked more than the old three retries", long.asked["gemini-flash-latest"] > 4, true);
+    check("and Flash-Lite, too inaccurate to stand in, is never asked", long.asked["gemini-flash-lite-latest"] ?? 0, 0);
+
+    console.log("\na fallback is there for whoever lists one");
+    const listed = await read({ "gemini-flash-latest": [503], "gemini-flash-lite-latest": [200] }, WITH_LITE);
+    check("Flash-Lite answers once Flash has been busy too long", listed.model, "gemini-flash-lite-latest");
+    check("and the reading says a lighter model stood in, and why", listed.fallback, "busy");
 
     console.log("\na brief rate limit is waited out");
     const minute = await read({ "gemini-flash-latest": [429, 429, 200] });
     check("Flash answers once the per-minute limit clears", [minute.model, minute.fallback],
         ["gemini-flash-latest", false]);
 
-    console.log("\nthe daily limit is not waited out, it is stepped around");
-    const started = Date.now();
+    console.log("\nthe daily limit is not waited out");
+    let started = Date.now();
     // Google's answer once the day's requests are spent: come back in 13 hours.
-    const daily = await read({ "gemini-flash-latest": [[429, 46755]], "gemini-flash-lite-latest": [200] });
-    check("Flash-Lite reads it, since its allowance is separate", daily.model, "gemini-flash-lite-latest");
-    check("and the reading says the usual model hit its limit", daily.fallback, "limit");
-    check("without waiting on a 13-hour Retry-After", Date.now() - started < 2000, true);
-    check("or asking Flash again", daily.asked["gemini-flash-latest"], 1);
+    const daily = await read({ "gemini-flash-latest": [[429, 46755]] });
+    check("it fails straight away, not after a 13-hour Retry-After", Date.now() - started < 2000, true);
+    check("as a rate limit", daily.error, 429);
+    check("saying when the readings come back",
+        /midnight Pacific, in about 13 hours/.test(daily.message), true);
+    check("without asking Flash again", daily.asked["gemini-flash-latest"], 1);
+
+    started = Date.now();
+    const dailyListed = await read({ "gemini-flash-latest": [[429, 46755]], "gemini-flash-lite-latest": [200] }, WITH_LITE);
+    check("with a fallback listed, its own allowance is used", dailyListed.model, "gemini-flash-lite-latest");
+    check("and the reading says the usual model hit its limit", dailyListed.fallback, "limit");
+    check("still without waiting", Date.now() - started < 2000, true);
 
     console.log("\nother failures are retried a few times, not waited out");
     const broken = await read({ "gemini-flash-latest": [500] });
