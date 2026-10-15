@@ -109,7 +109,10 @@ file with no tempo of its own plays at the MIDI standard's 120.
 violin and flute: same notes, different sound. Switch to clarinet and the
 playback drops a tone (written pitch to concert pitch), as it should: -2
 semitones for clarinet and trumpet, -9 for alto sax, -14 for tenor sax, -12 for
-guitar, bass guitar and double bass.
+guitar, bass guitar and double bass. A part whose MusicXML states its own
+transposition (`<transpose>`, as exported parts for clarinet, horn and the like
+do) plays at that instead, whichever instrument you pick to hear it on, and the
+status line says so.
 
 **Drums** — click *Drum groove*. The notes on the percussion staff are read
 through the score's own `<midi-unpitched>` mapping, so the kick, snare, hi-hat
