@@ -52,8 +52,8 @@ const player = new Player({
     onState: handleState,
     onInstrumentLoading: (loading, detail) => {
         // Samples load in the background, and must never bury an error the
-        // user still needs to read.
-        if (statusKind === "error") return;
+        // user still needs to read - or the clock of a read in progress.
+        if (statusKind === "error" || reading) return;
 
         if (loading) {
             const percent = Math.round((detail?.progress ?? 0) * 100);
@@ -181,6 +181,8 @@ let writtenOnScreen = false;
 /** The status line: what kind of message it is showing, and the last summary of
  *  the loaded piece, which a passing "busy" message is restored to. */
 let statusKind = null;
+/** True while a read is running: its clock owns the status line. */
+let reading = false;
 let lastInfo = "";
 
 /** The photo or PDF behind the current score, kept so answers can be applied to it. */
@@ -633,6 +635,7 @@ async function sendAnswers(answers) {
  * Returns the function that stops it.
  */
 function showElapsed(message) {
+    reading = true;
     const started = Date.now();
     const tick = () => {
         const seconds = Math.floor((Date.now() - started) / 1000);
@@ -641,12 +644,18 @@ function showElapsed(message) {
     };
     tick();
     const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
+    return () => {
+        clearInterval(timer);
+        reading = false;
+    };
 }
 
 function setUploadsEnabled(enabled) {
-    ui.file.disabled = !enabled;
-    for (const button of ui.samples) button.disabled = !enabled;
+    // The visible buttons too, not only the inputs behind them: a live-looking
+    // button that does nothing when tapped is worse than a disabled one.
+    for (const control of [ui.file, ui.camera, ui.chooseFile, ui.takePhoto, ...ui.samples]) {
+        control.disabled = !enabled;
+    }
 }
 
 async function post(url, body) {
