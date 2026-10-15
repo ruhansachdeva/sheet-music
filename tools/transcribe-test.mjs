@@ -19,7 +19,8 @@ import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
-const patient = new Agent({ headersTimeout: 15 * 60 * 1000, bodyTimeout: 15 * 60 * 1000 });
+// Two passes of up to 30 minutes each on the server.
+const patient = new Agent({ headersTimeout: 65 * 60 * 1000, bodyTimeout: 65 * 60 * 1000 });
 
 const PORT = Number(process.env.TEST_PORT ?? 3112);
 const ROOT = new URL("..", import.meta.url).pathname;
