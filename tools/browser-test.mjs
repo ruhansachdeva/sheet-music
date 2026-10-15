@@ -712,6 +712,36 @@ async function run() {
         check("Done closes the writer", edited.closed, true);
         check("and it can be reopened", edited.canReopen, true);
 
+        // --- on a phone the play bar never hides the page under it -----------
+        // The bar is docked to the bottom and grows when More is open, so the
+        // room left for it, and where scrolling stops, follow its real height.
+        console.log("\nthe play bar on a phone");
+        await page.send("Emulation.setDeviceMetricsOverride", {
+            width: 390, height: 844, deviceScaleFactor: 2, mobile: true,
+        });
+        await loadSample(page, "timing-test.musicxml");
+        const bar = await page.evaluate(`
+            document.querySelector(".editor-head .primary")?.click();
+            const more = document.querySelector(".more");
+            if (more.getAttribute("aria-expanded") !== "true") more.click();
+            await new Promise((r) => setTimeout(r, 400));
+            window.scrollTo(0, document.documentElement.scrollHeight);
+            await new Promise((r) => setTimeout(r, 300));
+            const controls = document.getElementById("controls").getBoundingClientRect();
+            const out = {
+                barHeight: Math.round(controls.height),
+                scoreClear: document.getElementById("score").getBoundingClientRect().bottom <= controls.top,
+                paddingCovers: parseFloat(getComputedStyle(document.documentElement).scrollPaddingBottom) >= controls.height,
+            };
+            more.click();
+            window.scrollTo(0, 0);
+            return out;
+        `);
+        await page.send("Emulation.clearDeviceMetricsOverride");
+        check("with More open the bar is taller than its closed 76px", bar.barHeight > 76, true);
+        check("and the end of the score still scrolls clear of it", bar.scoreClear, true);
+        check("and scrolling into view stops above it", bar.paddingCovers, true);
+
         // --- on a phone the writer docks, and you can see what you write -----
         console.log("\nwriting on a phone");
         await page.evaluate(`document.querySelector(".editor-head .primary")?.click();`);
