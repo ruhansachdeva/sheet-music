@@ -489,6 +489,65 @@ async function run() {
         check("with the slider on 120 BPM", mxl.slider, "120 BPM");
         check("and Download saves it, not the piece before", mxl.downloadHasIt, true);
 
+        // --- repeats, endings, jumps and pickups ------------------------------
+        // Each bar is one whole note, so the bars played can be read off the
+        // timeline's cursor steps in order.
+        console.log("\nform: repeats, endings, jumps, pickups");
+        const formBar = (n, after = "", before = "") =>
+            `<measure number="${n}">` +
+            (n === 1 ? `<attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>` : "") +
+            `${before}<note><pitch><step>C</step><octave>5</octave></pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>${after}</measure>`;
+        const formScore = (bars) =>
+            `<?xml version="1.0"?><score-partwise version="3.1"><part-list><score-part id="P1"><part-name>P</part-name></score-part></part-list><part id="P1">${bars.join("")}</part></score-partwise>`;
+        const forward = '<barline location="left"><bar-style>heavy-light</bar-style><repeat direction="forward"/></barline>';
+        const backward = '<barline location="right"><bar-style>light-heavy</bar-style><repeat direction="backward"/></barline>';
+        const said = (text, sound) => `<direction placement="above"><direction-type><words>${text}</words></direction-type><sound ${sound}/></direction>`;
+        const barsPlayed = (xml) => page.evaluate(`
+            const t = await window.sheetMusic.score.load(${JSON.stringify(xml)});
+            return t.steps.map((s) => s.measure);
+        `);
+        check("a repeat plays twice", await barsPlayed(formScore([formBar(1, "", forward), formBar(2, backward), formBar(3)])), [1, 2, 1, 2, 3]);
+        check("first and second endings", await barsPlayed(formScore([
+            formBar(1, "", forward),
+            formBar(2, '<barline location="right"><ending number="1" type="stop"/><bar-style>light-heavy</bar-style><repeat direction="backward"/></barline>',
+                '<barline location="left"><ending number="1" type="start"/></barline>'),
+            formBar(3, '<barline location="right"><ending number="2" type="discontinue"/></barline>',
+                '<barline location="left"><ending number="2" type="start"/></barline>'),
+        ])), [1, 2, 1, 3]);
+        check("D.C. al Fine", await barsPlayed(formScore([
+            formBar(1), formBar(2, said("Fine", 'fine="yes"')), formBar(3, said("D.C. al Fine", 'dacapo="yes"')),
+        ])), [1, 2, 3, 1, 2]);
+        check("D.S. al Coda", await barsPlayed(formScore([
+            formBar(1),
+            formBar(2, "", '<direction><direction-type><segno/></direction-type><sound segno="s"/></direction>'),
+            formBar(3, said("To Coda", 'tocoda="c"')),
+            formBar(4, said("D.S. al Coda", 'dalsegno="s"')),
+            formBar(5, "", '<direction><direction-type><coda/></direction-type><sound coda="c"/></direction>'),
+        ])), [1, 2, 3, 4, 2, 3, 5]);
+
+        // A pickup comes in on its own beat: the count-in only counts the
+        // beats of its bar before it - unless that is too few to catch the
+        // tempo from, when a full bar goes in front.
+        const countIn = (xml) => page.evaluate(`
+            const t = await window.sheetMusic.score.load(${JSON.stringify(xml)});
+            return t.countIn.map((c) => Math.round(c.time * 100) / 100 + (c.accent ? "!" : ""));
+        `);
+        const withPickup = (type, duration, dot = false) => formScore([
+            `<measure number="0" implicit="yes"><attributes><divisions>480</divisions><time><beats>4</beats>` +
+                `<beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>` +
+                `<note><pitch><step>G</step><octave>4</octave></pitch><duration>${duration}</duration>` +
+                `<voice>1</voice><type>${type}</type>${dot ? "<dot/>" : ""}</note></measure>`,
+            formBar(2),
+        ]);
+        check("no pickup: a full bar of count-in", await countIn(formScore([formBar(1), formBar(2)])),
+            ["-2.4!", "-1.8", "-1.2", "-0.6"]);
+        check("a one-beat pickup comes in on 4", await countIn(withPickup("quarter", 480)),
+            ["-1.8!", "-1.2", "-0.6"]);
+        check("a three-beat pickup gets a bar and a beat", await countIn(withPickup("half", 1440, true)),
+            ["-3!", "-2.4", "-1.8", "-1.2", "-0.6!"]);
+        check("an eighth pickup comes in after beat 4", await countIn(withPickup("eighth", 240)),
+            ["-2.1!", "-1.5", "-0.9", "-0.3"]);
+
         // --- rendering ------------------------------------------------------
         console.log("\nrendering");
         await loadSample(page, "twinkle.musicxml");

@@ -466,16 +466,34 @@ function beatGrid(measures) {
     return beats.sort((a, b) => a.time - b.time);
 }
 
-/** One full bar of clicks before the music, in the opening time signature. */
+/**
+ * Clicks before the music, in the opening time signature: one full bar. A
+ * piece that opens with a pickup instead gets the beats of the pickup's bar
+ * that come before it, so the pickup comes in on its own beat - "1, 2, 3",
+ * and in on 4 - with a full bar in front when that alone would be too few
+ * clicks to catch the tempo from.
+ */
 function countInBar(measures, fallbackBpm) {
     const first = measures[0];
     const beats = first?.beats ?? 4;
     const beatLength = first?.beatLength ?? 0.25;
     const bpm = first?.bpm ?? fallbackBpm;
-    const beatSeconds = toSeconds(beatLength, bpm);
 
-    return Array.from({ length: beats }, (_, i) => ({
-        time: (i - beats) * beatSeconds, // negative: before the first note
-        accent: i === 0,
-    }));
+    // Where in its bar the music starts, in whole notes: 0 unless a pickup.
+    const isPickup = first && first.lengthWhole < first.timeSignatureWhole - 1e-6;
+    const startsAt = isPickup ? first.timeSignatureWhole - first.lengthWhole : 0;
+    const beatsBefore = Math.ceil(startsAt / beatLength - 1e-6);
+
+    // Clicks by beat of the bar, counting from the pickup bar's beat 1.
+    let beat = startsAt > 0 ? 0 : -beats;
+    if (startsAt > 0 && beatsBefore < 2) beat -= beats;
+
+    const clicks = [];
+    for (; beat * beatLength < startsAt - 1e-9; beat++) {
+        clicks.push({
+            time: toSeconds(beat * beatLength - startsAt, bpm), // negative: before the music
+            accent: ((beat % beats) + beats) % beats === 0,
+        });
+    }
+    return clicks;
 }
