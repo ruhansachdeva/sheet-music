@@ -7,7 +7,8 @@
        the app should feel like it belongs on the same desk. */
     --ink: #1c1917;
     --ink-soft: #44403c;
-    --muted: #78716c;
+    /* 4.7:1 or better on every light background, which is WCAG AA. */
+    --muted: #716a64;
     --line: #e7e2db;
     --line-strong: #d6cfc5;
     --surface: #fffdfa;
