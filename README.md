@@ -52,22 +52,26 @@ Two providers are built in, and the app uses whichever key you set:
 
 Set both and Gemini wins; `PROVIDER=claude` in `.env` forces the other.
 
-Gemini's free tier shares capacity, so a model is sometimes too busy to answer,
-often for minutes at a time. The provider handles that itself: it keeps asking
-`gemini-flash-latest` for up to five minutes, as often as Google allows, and
-only then falls through to `gemini-flash-lite-latest`. The same happens once
-Flash's daily allowance is spent - 20 requests a day on the free tier, reset at
-midnight Pacific - since Flash-Lite has an allowance of its own. Flash-Lite
-reads notation noticeably worse, so when it does the reading, the page says so,
-and why.
+Reading is done by `gemini-flash-latest`. The free tier shares capacity, so
+Flash is sometimes too busy to answer, often for minutes at a time: the
+provider keeps asking for up to five minutes, as often as Google allows, before
+saying so. The free tier also allows 20 readings a day, reset at midnight
+Pacific; once they are used, the page says when they come back rather than
+waiting.
+
+There is deliberately no automatic fallback to `gemini-flash-lite-latest`.
+Measured on the accuracy samples, Flash-Lite got 0-14% of pitches right,
+against about 90% for Flash - a reading that wrong is worse than none. If you
+want one anyway, list it: `GEMINI_MODEL=gemini-flash-latest,gemini-flash-lite-latest`,
+and the page will say when the lighter model did the reading.
 Optional overrides, none of them usually needed:
 
 | Variable | Default | Why you might change it |
 | --- | --- | --- |
-| `GEMINI_MODEL` | the two above, in order | Pin one model. The error message lists what your key can reach. |
+| `GEMINI_MODEL` | `gemini-flash-latest` | Use another model, or list several, comma-separated, to fall through when one is busy or out of requests. The error message lists what your key can reach. |
 | `GEMINI_THINKING` | `medium` | Thinking tokens come out of the output budget - at `high` the model can spend the lot thinking and return nothing. |
 | `GEMINI_MAX_OUTPUT_TOKENS` | `32768` | Raise it for very dense pages. |
-| `GEMINI_BUSY_PATIENCE_MS` | `300000` | How long to wait for a busy model before trying the lighter one. |
+| `GEMINI_BUSY_PATIENCE_MS` | `300000` | How long to wait for a busy model before giving up on it. |
 | `GEMINI_API_BASE` | Google's v1beta endpoint | Send requests through a proxy. |
 
 ## Testing each feature
