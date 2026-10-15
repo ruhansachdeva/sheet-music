@@ -51,6 +51,10 @@ jobs:
           # Pages would otherwise run the files through Jekyll, which skips
           # directories that begin with an underscore.
           touch site/.nojekyll
+          # There is no server here to read photos. Say so from a file,
+          # rather than letting every visit log a 404 for api/health.
+          mkdir -p site/api
+          echo '{"ok":true,"canRead":false,"provider":null,"static":true}' > site/api/health
 
       - uses: actions/upload-pages-artifact@v3
         with:
