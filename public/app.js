@@ -216,6 +216,8 @@ async function checkReader() {
         const health = await response.json();
         canRead = Boolean(health.canRead);
         if (health.provider) readerName = health.provider;
+        // The hosted build answers from a static file that says it is one.
+        if (health.static) served = false;
     } catch {
         served = false;
         canRead = false;
