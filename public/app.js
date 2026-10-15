@@ -69,6 +69,7 @@ const questionPanel = new QuestionPanel(ui.questions, { onSubmit: sendAnswers })
 const editor = new Editor(ui.editor, {
     onChange: (written) => showWrittenScore(written),
     onPreview: (midi) => player.preview(midi).catch(() => {}),
+    onPreviewDrum: (gm) => player.previewDrum(gm).catch(() => {}),
     onClose: () => {
         setStatus("Saved. Press play to hear it.", "info");
         ui.editScore.hidden = false;
@@ -154,14 +155,21 @@ player.setInstrument(ui.instrument.value).catch(reportError);
 ui.instrument.addEventListener("change", () => {
     localStorage.setItem("instrument", ui.instrument.value);
     player.setInstrument(ui.instrument.value).catch(reportError);
+    // Writing drums is a different kind of notation, so the writer follows.
+    editor.setKind(writingKind());
 });
+
+/** Drums are written as unpitched notes on a percussion staff. */
+function writingKind() {
+    return INSTRUMENTS[ui.instrument.value]?.drums ? "drums" : "pitched";
+}
 
 // The real file inputs are hidden: the buttons stand in for them, so they can
 // be styled and sized for a thumb.
 ui.chooseFile.addEventListener("click", () => ui.file.click());
 ui.writeMusic.addEventListener("click", () => {
     ui.editScore.hidden = true;
-    editor.open();
+    editor.open(null, writingKind());
 });
 
 // Go back into something you wrote, rather than starting again.

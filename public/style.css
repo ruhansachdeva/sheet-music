@@ -1017,3 +1017,27 @@ body.dropping #setup {
     border: 1px solid var(--warn-line);
     border-radius: var(--radius-sm);
 }
+
+/* Drum pads, in place of the keyboard, when writing for a kit. */
+.editor-kit {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--s2);
+}
+
+.pad {
+    min-height: 56px;
+    font-size: var(--text-sm);
+    font-weight: 600;
+}
+
+.pad.cymbal {
+    background: var(--surface-sunk);
+}
+
+.pad:active:not(:disabled) {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+    transform: none;
+}

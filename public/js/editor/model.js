@@ -4,6 +4,8 @@
 // it is written: notes are packed into measures, and a note that will not fit
 // is split across the bar line and tied, which is what a copyist would do.
 
+import { GM_DRUM_NAMES, KIT } from "../drums.js";
+
 export const DIVISIONS = 480; // ticks per quarter note
 
 /** Note lengths, longest first - the order the splitter relies on. */
@@ -50,15 +52,16 @@ export function decompose(ticks) {
 export const SHARP = 1;
 export const FLAT = -1;
 
-/** A fresh, empty score. */
-export function emptyScore() {
+/** A fresh, empty score. `kind` is "pitched" or "drums". */
+export function emptyScore(kind = "pitched") {
     return {
         title: "Untitled",
         tempo: 100,
         beats: 4,
         beatType: 4,
         fifths: 0,
-        clef: "treble",
+        clef: kind === "drums" ? "percussion" : "treble",
+        kind,
         notes: [],
     };
 }
@@ -87,10 +90,17 @@ function escapeXml(text) {
     );
 }
 
-function noteXml({ part, pitch, tieStart, tieStop, clef }) {
+function noteXml({ part, pitch, drum, tieStart, tieStop, clef }) {
     const lines = ["      <note>"];
 
-    if (!pitch) {
+    if (drum) {
+        // An unpitched note says where it sits on the staff, and points at the
+        // score-instrument that says which drum that is.
+        lines.push("        <unpitched>");
+        lines.push(`          <display-step>${drum.step}</display-step>`);
+        lines.push(`          <display-octave>${drum.octave}</display-octave>`);
+        lines.push("        </unpitched>");
+    } else if (!pitch) {
         lines.push("        <rest/>");
     } else {
         if (tieStop) lines.push('        <tie type="stop"/>');
@@ -103,10 +113,11 @@ function noteXml({ part, pitch, tieStart, tieStop, clef }) {
     }
 
     lines.push(`        <duration>${Math.round(part.ticks)}</duration>`);
+    if (drum) lines.push(`        <instrument id="P1-I${drum.gm}"/>`);
     lines.push("        <voice>1</voice>");
     lines.push(`        <type>${part.duration}</type>`);
     for (let i = 0; i < part.dots; i++) lines.push("        <dot/>");
-    if (clef === "bass") lines.push("        <staff>1</staff>");
+    if (drum?.cross) lines.push("        <notehead>x</notehead>");
 
     if (tieStart || tieStop) {
         lines.push("        <notations>");
@@ -150,9 +161,12 @@ export function toMusicXml(score) {
             for (const [index, part] of parts.entries()) {
                 const isLast = index === parts.length - 1;
 
+                const piece = note.drum != null ? KIT.find((k) => k.gm === note.drum) : null;
+
                 current.push({
                     part: { ...part, ticks: ticksOf(part) },
-                    pitch: note.rest ? null : spellMidi(note.midi, note.prefer ?? SHARP),
+                    drum: piece && !note.rest ? { ...spellMidi(piece.staff), ...piece } : null,
+                    pitch: note.rest || piece ? null : spellMidi(note.midi, note.prefer ?? SHARP),
                     // Every piece of a split note is tied to the next, and to
                     // the one before it. A rest is never tied.
                     tieStart: !note.rest && (!isLast || spansMore),
@@ -183,10 +197,32 @@ export function toMusicXml(score) {
         measures.push(current);
     }
 
-    const clefXml =
-        score.clef === "bass"
-            ? "        <sign>F</sign>\n        <line>4</line>"
-            : "        <sign>G</sign>\n        <line>2</line>";
+    const isDrums = score.kind === "drums";
+    const clefXml = isDrums
+        ? "        <sign>percussion</sign>\n        <line>2</line>"
+        : score.clef === "bass"
+          ? "        <sign>F</sign>\n        <line>4</line>"
+          : "        <sign>G</sign>\n        <line>2</line>";
+
+    // One score-instrument per drum actually used, each naming its General
+    // MIDI number so the player knows which kit piece to sound.
+    const used = [...new Set(score.notes.filter((n) => !n.rest && n.drum != null).map((n) => n.drum))];
+    const kitXml = used
+        .map(
+            (gm) => `      <score-instrument id="P1-I${gm}">
+        <instrument-name>${GM_DRUM_NAMES[gm] ?? `Drum ${gm}`}</instrument-name>
+      </score-instrument>`,
+        )
+        .concat(
+            used.map(
+                // midi-unpitched counts from 1, so the bass drum at 36 is 37.
+                (gm) => `      <midi-instrument id="P1-I${gm}">
+        <midi-channel>10</midi-channel>
+        <midi-unpitched>${gm + 1}</midi-unpitched>
+      </midi-instrument>`,
+            ),
+        )
+        .join("\n");
 
     const body = measures
         .map((notes, index) => {
@@ -223,7 +259,8 @@ ${clefXml}
   </work>
   <part-list>
     <score-part id="P1">
-      <part-name>${escapeXml(score.title)}</part-name>
+      <part-name>${escapeXml(isDrums ? "Drum Set" : score.title)}</part-name>
+${kitXml}
     </score-part>
   </part-list>
   <part id="P1">

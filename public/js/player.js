@@ -331,6 +331,14 @@ export class Player {
         });
     }
 
+    /** Sounds one kit piece, for the writer's drum pads. */
+    async previewDrum(gmKey) {
+        const ctx = this.audioContext();
+        if (ctx.state === "suspended") await ctx.resume();
+        await this.loadDrums();
+        this.drumMachine?.start({ note: resolveDrumName(gmKey, this.drumNames) });
+    }
+
     /** A short sine blip, higher and louder on beat 1. */
     playClick(when, accent) {
         const ctx = this.ctx;

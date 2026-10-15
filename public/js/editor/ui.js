@@ -6,6 +6,7 @@
 // re-engraved as you go.
 
 import { DURATIONS, emptyScore, toMusicXml } from "./model.js";
+import { KIT } from "../drums.js";
 
 /** One octave of keys, drawn in keyboard order. */
 const KEYS = [
@@ -47,11 +48,12 @@ const TIME_SIGNATURES = [
 ];
 
 export class Editor {
-    constructor(container, { onChange, onClose, onPreview }) {
+    constructor(container, { onChange, onClose, onPreview, onPreviewDrum }) {
         this.container = container;
         this.onChange = onChange;
         this.onClose = onClose;
         this.onPreview = onPreview;
+        this.onPreviewDrum = onPreviewDrum;
         this.score = emptyScore();
         this.octave = 4;
         this.duration = "quarter";
@@ -63,8 +65,20 @@ export class Editor {
         return !this.container.hidden;
     }
 
-    open(score) {
-        this.score = score ? structuredClone(score) : emptyScore();
+    /** Switches between writing pitches and writing drums. */
+    setKind(kind) {
+        if (kind === this.score.kind) return;
+        this.score = { ...emptyScore(kind), title: this.score.title, tempo: this.score.tempo,
+            beats: this.score.beats, beatType: this.score.beatType };
+        this.history = [];
+        if (this.isOpen) {
+            this.render();
+            this.changed();
+        }
+    }
+
+    open(score, kind = "pitched") {
+        this.score = score ? structuredClone(score) : emptyScore(kind);
         this.history = [];
         this.render();
         this.container.hidden = false;
@@ -104,6 +118,18 @@ export class Editor {
         this.changed();
     }
 
+    /** Adds a hit on one piece of the kit. */
+    addDrum(gm) {
+        this.onPreviewDrum?.(gm);
+        this.remember();
+        this.score.notes.push({
+            drum: gm,
+            duration: this.duration,
+            dots: this.dotted ? 1 : 0,
+        });
+        this.changed();
+    }
+
     addRest() {
         this.remember();
         this.score.notes.push({
@@ -135,7 +161,7 @@ export class Editor {
             this.renderHeader(),
             this.renderSettings(),
             this.renderPalette(),
-            this.renderKeyboard(),
+            this.score.kind === "drums" ? this.renderKit() : this.renderKeyboard(),
         );
     }
 
@@ -204,7 +230,8 @@ export class Editor {
             this.changed();
         });
 
-        row.append(labelled("Time", time), labelled("Tempo", tempo), labelled("Clef", clef));
+        row.append(labelled("Time", time), labelled("Tempo", tempo));
+        if (this.score.kind !== "drums") row.append(labelled("Clef", clef));
         return row;
     }
 
@@ -282,6 +309,17 @@ export class Editor {
 
         const label = el("span", "octave-label", `Octave ${this.octave}`);
         wrap.append(keyboard, el("div", "octave-row", "", [down, label, up]));
+        return wrap;
+    }
+
+    /** A pad per kit piece, instead of a keyboard. */
+    renderKit() {
+        const wrap = el("div", "editor-kit");
+        for (const piece of KIT) {
+            const pad = el("button", `pad${piece.cross ? " cymbal" : ""}`, piece.label);
+            pad.addEventListener("click", () => this.addDrum(piece.gm));
+            wrap.appendChild(pad);
+        }
         return wrap;
     }
 

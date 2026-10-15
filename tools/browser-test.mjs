@@ -519,6 +519,51 @@ async function run() {
         check("Done closes the writer", edited.closed, true);
         check("and it can be reopened", edited.canReopen, true);
 
+        // --- writing drums ---------------------------------------------------
+        console.log("\nwriting drums");
+        const kitWriting = await page.evaluate(`
+            document.getElementById("instrument").value = "drums";
+            document.getElementById("instrument").dispatchEvent(new Event("change"));
+            document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 300));
+
+            const pad = (name) =>
+                [...document.querySelectorAll(".pad")].find((p) => p.textContent === name);
+            pad("Kick").click();
+            pad("Hi-hat").click();
+            pad("Snare").click();
+            pad("Crash").click();
+            await new Promise((r) => setTimeout(r, 500));
+
+            const timeline = window.sheetMusic.timeline;
+            const xml = window.sheetMusic.editor.toMusicXml();
+            return {
+                pads: document.querySelectorAll(".pad").length,
+                keys: document.querySelectorAll(".key").length,
+                drumKeys: timeline.notes.map((n) => n.drumKey),
+                everyNoteIsADrum: timeline.notes.every((n) => n.drumKey !== null),
+                percussionClef: xml.includes("<sign>percussion</sign>"),
+                unpitched: xml.includes("<unpitched>"),
+                channelTen: xml.includes("<midi-channel>10</midi-channel>"),
+                crossNotehead: xml.includes("<notehead>x</notehead>"),
+            };
+        `);
+        check("the kit replaces the keyboard", [kitWriting.pads, kitWriting.keys], [9, 0]);
+        // Kick 36, closed hi-hat 42, snare 38, crash 49.
+        check("the pads tapped are the drums written", kitWriting.drumKeys, [36, 42, 38, 49]);
+        check("and they all play as drums", kitWriting.everyNoteIsADrum, true);
+        check("on a percussion clef", kitWriting.percussionClef, true);
+        check("as unpitched notes", kitWriting.unpitched, true);
+        check("mapped to channel 10", kitWriting.channelTen, true);
+        check("with cross noteheads for cymbals", kitWriting.crossNotehead, true);
+
+        await page.evaluate(`
+            window.sheetMusic.editor.clear();
+            document.querySelector(".editor-head .primary").click();
+            document.getElementById("instrument").value = "piano";
+            document.getElementById("instrument").dispatchEvent(new Event("change"));
+        `);
+
         // --- the clarifying question panel ----------------------------------
         console.log("\nclarifying questions");
         const asked = await page.evaluate(`
