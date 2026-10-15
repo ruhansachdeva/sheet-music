@@ -2,6 +2,10 @@
    layouts are additions in the media queries at the bottom. */
 
 :root {
+    /* Native controls - checkboxes, selects, number fields, scrollbars -
+       follow the theme instead of staying light in dark mode. */
+    color-scheme: light dark;
+
     /* Paper and ink: a warm off-white page, near-black ink with a little
        warmth in it, and one deep accent. Sheet music is printed on paper, and
        the app should feel like it belongs on the same desk. */
@@ -721,8 +725,11 @@ body.dropping #setup {
         box-shadow: 0 1px 2px rgb(0 0 0 / 40%);
     }
 
-    /* On a dark card a black key would vanish, so give it an edge. */
-    .key.black {
+    /* On a dark card a black key would vanish, so it is darker than the
+       card and has an edge. (:root, so it outranks the .key.black rule
+       further down, which once quietly undid it.) */
+    :root .key.black {
+        background: #0b0908;
         border-color: var(--line-strong);
     }
 }
