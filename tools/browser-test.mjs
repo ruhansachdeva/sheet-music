@@ -1631,6 +1631,34 @@ async function run() {
             check("playback starts before bar 1", counted.atStart < -2.2, true);
             check("and counts towards it", counted.later > counted.atStart, true);
 
+            // Moving the tempo or a toggle mid-count-in rebuilds the queue; the
+            // clicks still to come have to be in the rebuilt one.
+            const recounted = await page.evaluate(`
+                const { player, timeline } = window.sheetMusic;
+                player.setOption("countIn", true);
+                await player.play();
+                // Schedule as a page in view does: headless counts as hidden,
+                // which schedules seconds ahead and empties the queue early.
+                player.lookahead = 0.15;
+                await new Promise((r) => setTimeout(r, 300));
+                const queued = () => player.events.slice(player.eventIndex)
+                    .filter((e) => e.click && e.time < 0).map((e) => e.time);
+                const due = () => timeline.countIn
+                    .filter((b) => b.time >= player.scheduledUntil - 1e-6).map((b) => b.time);
+                player.setTempo(80);
+                const tempo = { queued: queued(), due: due() };
+                player.setOption("metronome", true);
+                const toggle = { queued: queued(), due: due() };
+                player.stop();
+                player.setOption("countIn", false);
+                player.setOption("metronome", false);
+                player.setTempo(timeline.bpm);
+                return { tempo, toggle };
+            `);
+            check("clicks were still due when the tempo moved", recounted.tempo.due.length > 0, true);
+            check("and the count-in survives the tempo change", recounted.tempo.queued, recounted.tempo.due);
+            check("and switching the metronome on", recounted.toggle.queued, recounted.toggle.due);
+
             console.log("\npause, resume and tempo");
             const transport = await page.evaluate(`
                 const { player } = window.sheetMusic;
