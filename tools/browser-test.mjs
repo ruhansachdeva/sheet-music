@@ -1145,6 +1145,32 @@ async function run() {
         check("and says so in the status", rejected.text.length > 0, true, rejected.text);
 
         // --- a draft survives a reload ---------------------------------------
+        // Edit belongs to the written score: once something else is loaded it
+        // would reopen the old score over it.
+        console.log("\nedit follows the written score");
+        const editButton = await page.evaluate(`
+            const editor = window.sheetMusic.editor;
+            if (document.getElementById("editor").hidden) document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 300));
+            if (editor.selected !== null) editor.select(editor.selected);
+            editor.stacking = false;
+            editor.clear();
+            document.querySelector(".key").click();
+            // Done straight away, while that note is still being engraved.
+            [...document.querySelectorAll("#editor button")].find((b) => b.textContent === "Done").click();
+            await new Promise((r) => setTimeout(r, 500));
+            const edit = document.getElementById("edit-score");
+            const out = { afterDone: !edit.hidden };
+            await window.sheetMusic.loadSample("twinkle.musicxml");
+            out.afterSample = !edit.hidden;
+            await window.sheetMusic.loadSample("groove.mid");
+            out.afterMidi = !edit.hidden;
+            return out;
+        `);
+        check("Edit is offered for the score you wrote", editButton.afterDone, true);
+        check("but not once a sample replaces it", editButton.afterSample, false);
+        check("nor a MIDI file", editButton.afterMidi, false);
+
         console.log("\ndrafts survive a reload");
         await page.evaluate(`
             const editor = window.sheetMusic.editor;
