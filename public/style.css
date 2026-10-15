@@ -857,7 +857,7 @@ body.dropping #setup {
 
 .editor-settings {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: var(--s3);
 }
 
@@ -915,6 +915,7 @@ body.dropping #setup {
 
 .editor-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--s2);
 }
@@ -927,6 +928,7 @@ body.dropping #setup {
 
 .editor-count {
     margin-left: auto;
+    white-space: nowrap;
     font-size: var(--text-sm);
     color: var(--muted);
     font-variant-numeric: tabular-nums;
@@ -997,7 +999,7 @@ body.dropping #setup {
     }
 
     .editor-settings {
-        grid-template-columns: repeat(3, minmax(0, 200px));
+        grid-template-columns: repeat(4, minmax(0, 180px));
     }
 }
 

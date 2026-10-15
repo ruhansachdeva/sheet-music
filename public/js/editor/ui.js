@@ -5,24 +5,35 @@
 // length from a palette of note values. Each tap appends to the score, which is
 // re-engraved as you go.
 
-import { DURATIONS, emptyScore, toMusicXml } from "./model.js";
+import { DURATIONS, FLAT, KEY_SIGNATURES, SHARP, emptyScore, toMusicXml } from "./model.js";
 import { KIT } from "../drums.js";
 
 /** One octave of keys, drawn in keyboard order. */
 const KEYS = [
-    { name: "C", offset: 0, black: false },
-    { name: "C♯", offset: 1, black: true },
-    { name: "D", offset: 2, black: false },
-    { name: "E♭", offset: 3, black: true },
-    { name: "E", offset: 4, black: false },
-    { name: "F", offset: 5, black: false },
-    { name: "F♯", offset: 6, black: true },
-    { name: "G", offset: 7, black: false },
-    { name: "A♭", offset: 8, black: true },
-    { name: "A", offset: 9, black: false },
-    { name: "B♭", offset: 10, black: true },
-    { name: "B", offset: 11, black: false },
+    { name: "C", offset: 0 },
+    { sharp: "C♯", flat: "D♭", offset: 1, usual: SHARP },
+    { name: "D", offset: 2 },
+    { sharp: "D♯", flat: "E♭", offset: 3, usual: FLAT },
+    { name: "E", offset: 4 },
+    { name: "F", offset: 5 },
+    { sharp: "F♯", flat: "G♭", offset: 6, usual: SHARP },
+    { name: "G", offset: 7 },
+    { sharp: "G♯", flat: "A♭", offset: 8, usual: FLAT },
+    { name: "A", offset: 9 },
+    { sharp: "A♯", flat: "B♭", offset: 10, usual: FLAT },
+    { name: "B", offset: 11 },
 ];
+
+/**
+ * How a black key is named, and so spelled, in this key: as flats in a flat
+ * key, sharps in a sharp key, and the customary mix in C. The label on the key
+ * is always the note that ends up on the staff.
+ */
+function spellingFor(key, fifths) {
+    if (!key.sharp) return { name: key.name, prefer: SHARP };
+    const prefer = fifths < 0 ? FLAT : fifths > 0 ? SHARP : key.usual;
+    return { name: prefer === FLAT ? key.flat : key.sharp, prefer };
+}
 
 /**
  * The note values, drawn rather than typed: the Unicode musical symbols are
@@ -58,6 +69,9 @@ export class Editor {
         this.octave = 4;
         this.duration = "quarter";
         this.dotted = false;
+        // Must start as a real boolean: classList.toggle(name, undefined)
+        // toggles rather than forcing off, which drew Stack as switched on.
+        this.stacking = false;
         this.history = [];
     }
 
@@ -107,13 +121,14 @@ export class Editor {
         if (this.history.length > 50) this.history.shift();
     }
 
-    addNote(midi) {
+    addNote(midi, prefer = SHARP) {
         this.onPreview?.(midi);
-        if (this.joinToLast("midis", midi)) return;
+        if (this.joinToLast("midis", midi, prefer)) return;
 
         this.remember();
         this.score.notes.push({
             midis: [midi],
+            spell: { [midi]: prefer },
             duration: this.duration,
             dots: this.dotted ? 1 : 0,
         });
@@ -124,7 +139,7 @@ export class Editor {
      * While stacking, a tap joins the note before it instead of following it,
      * which is what makes a chord. Returns whether it was taken.
      */
-    joinToLast(field, value) {
+    joinToLast(field, value, prefer) {
         if (!this.stacking) return false;
 
         const last = this.score.notes.at(-1);
@@ -133,6 +148,7 @@ export class Editor {
 
         this.remember();
         last[field] = [...last[field], value].sort((a, b) => a - b);
+        if (prefer !== undefined) last.spell = { ...last.spell, [value]: prefer };
         this.changed();
         return true;
     }
@@ -253,7 +269,23 @@ export class Editor {
         });
 
         row.append(labelled("Time", time), labelled("Tempo", tempo));
-        if (this.score.kind !== "drums") row.append(labelled("Clef", clef));
+        if (this.score.kind !== "drums") {
+            const key = el("select");
+            key.setAttribute("aria-label", "Key signature");
+            for (const signature of KEY_SIGNATURES) {
+                const option = el("option", null, `${signature.name} major`);
+                option.value = String(signature.fifths);
+                key.appendChild(option);
+            }
+            key.value = String(this.score.fifths);
+            key.addEventListener("change", () => {
+                this.score.fifths = Number(key.value);
+                // The black keys rename themselves to suit the new key.
+                this.render();
+                this.changed();
+            });
+            row.append(labelled("Key", key), labelled("Clef", clef));
+        }
         return row;
     }
 
@@ -292,8 +324,8 @@ export class Editor {
         // Stacking is what turns a run of single notes into chords.
         const stack = el("button", "stack", "Stack");
         stack.title = "Add the next note to the one before it";
-        stack.setAttribute("aria-pressed", String(this.stacking));
-        stack.classList.toggle("chosen", this.stacking);
+        stack.setAttribute("aria-pressed", String(Boolean(this.stacking)));
+        stack.classList.toggle("chosen", Boolean(this.stacking));
         stack.addEventListener("click", () => {
             this.stacking = !this.stacking;
             this.render();
@@ -326,10 +358,11 @@ export class Editor {
         const keyboard = el("div", "keyboard");
         for (const key of KEYS) {
             const midi = (this.octave + 1) * 12 + key.offset;
-            const button = el("button", `key ${key.black ? "black" : "white"}`);
-            button.innerHTML = `<span>${key.name}</span>`;
-            button.setAttribute("aria-label", `${key.name}${this.octave}`);
-            button.addEventListener("click", () => this.addNote(midi));
+            const { name, prefer } = spellingFor(key, this.score.fifths);
+            const button = el("button", `key ${key.sharp ? "black" : "white"}`);
+            button.innerHTML = `<span>${name}</span>`;
+            button.setAttribute("aria-label", `${name}${this.octave}`);
+            button.addEventListener("click", () => this.addNote(midi, prefer));
             keyboard.appendChild(button);
         }
 
