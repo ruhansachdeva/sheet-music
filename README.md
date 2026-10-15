@@ -114,6 +114,11 @@ phone there is a **Take a photo** button as well, which opens the rear camera
 directly rather than the photo library. It only appears on devices that have a
 camera.
 
+**On a laptop** — the writer takes the keyboard: A–G for notes, ↑ ↓ for the
+octave, 1 2 4 8 6 for whole to sixteenth (the fraction of a whole note), `.`
+for a dot, R for a rest, S for stack, Backspace to undo or delete, Esc to stop
+editing a note.
+
 **Fixing a note** — every note you write appears as a chip in a strip above the
 note values. Tap one to select it; it lights up on the score. Then a key
 replaces its pitch, a note value changes its length, **Rest** turns it into a

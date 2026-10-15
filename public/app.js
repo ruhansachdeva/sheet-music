@@ -366,6 +366,13 @@ ui.metronome.addEventListener("change", () =>
 
 document.addEventListener("keydown", (event) => {
     if (event.target instanceof Element && event.target.matches("input, select, textarea")) return;
+
+    // While writing, the keyboard writes notes.
+    if (editor.isOpen && editor.handleKey(event)) {
+        event.preventDefault();
+        return;
+    }
+
     if (event.code === "Space" && !ui.controls.hidden) {
         event.preventDefault();
         Promise.resolve(player.toggle()).catch(reportError);
