@@ -399,8 +399,29 @@ ui.metronome.addEventListener("change", () =>
     player.setOption("metronome", ui.metronome.checked),
 );
 
+// Whether whatever has focus got it from a click or a tap, rather than from
+// the keyboard. (:focus-visible cannot tell: the browser switches it on for
+// the focused button the moment any key goes down, Space included.)
+let pointerIsDown = false;
+let focusFromPointer = false;
+document.addEventListener("pointerdown", () => (pointerIsDown = true), true);
+document.addEventListener("pointerup", () => setTimeout(() => (pointerIsDown = false)), true);
+document.addEventListener("focusin", () => (focusFromPointer = pointerIsDown), true);
+
 document.addEventListener("keydown", (event) => {
     if (event.target instanceof Element && event.target.matches("input, select, textarea")) return;
+
+    // Space presses a button reached with the keyboard, as it should for a
+    // keyboard user. A button just clicked keeps focus too, and there Space
+    // still plays, rather than writing the clicked piano key a second time.
+    if (
+        event.code === "Space" &&
+        !focusFromPointer &&
+        event.target instanceof Element &&
+        event.target.matches("button, summary, a[href], [role=button], [role=option]")
+    ) {
+        return;
+    }
 
     // While writing, the keyboard writes notes.
     if (editor.isOpen && editor.handleKey(event)) {
