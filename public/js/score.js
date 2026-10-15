@@ -362,6 +362,44 @@ export class Score {
         this.litElements = [];
     }
 
+    /**
+     * The note or rest drawn nearest a point on screen, as where it starts in
+     * whole notes from the beginning of the score, or null when none is within
+     * reach. A fingertip covers more than a notehead on a phone, so a tap
+     * takes the nearest note rather than needing a direct hit.
+     */
+    noteAt(clientX, clientY, reach = 24) {
+        let best = null;
+        for (const staves of this.osmd.GraphicSheet?.MeasureList ?? []) {
+            for (const measure of staves) {
+                for (const entry of measure?.staffEntries ?? []) {
+                    for (const voiceEntry of entry.graphicalVoiceEntries) {
+                        for (const gNote of voiceEntry.notes) {
+                            const box = gNote.getSVGGElement?.()?.getBoundingClientRect();
+                            if (!box?.width) continue;
+
+                            // How far outside the note's box the point is, and
+                            // as a tie-break where boxes overlap, from its middle.
+                            const outside = Math.hypot(
+                                Math.max(box.left - clientX, 0, clientX - box.right),
+                                Math.max(box.top - clientY, 0, clientY - box.bottom),
+                            );
+                            const fromMiddle = Math.hypot(
+                                clientX - (box.left + box.right) / 2,
+                                clientY - (box.top + box.bottom) / 2,
+                            );
+                            if (outside > reach) continue;
+                            if (best && (outside > best.outside ||
+                                (outside === best.outside && fromMiddle >= best.fromMiddle))) continue;
+                            best = { outside, fromMiddle, note: gNote.sourceNote };
+                        }
+                    }
+                }
+            }
+        }
+        return best ? best.note.getAbsoluteTimestamp().RealValue : null;
+    }
+
     reset() {
         this.clearLit();
         this.stepIndex = -1;

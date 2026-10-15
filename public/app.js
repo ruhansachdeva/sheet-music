@@ -271,11 +271,30 @@ ui.writeMusic.addEventListener("click", () => {
 });
 
 // Go back into something you wrote, rather than starting again.
-ui.editScore.addEventListener("click", () => {
+ui.editScore.addEventListener("click", reopenWriter);
+
+function reopenWriter() {
     ui.editScore.hidden = true;
     document.body.classList.add("writing");
     editor.open(editor.score, editor.score.kind);
     player.warmUp().catch(reportError);
+}
+
+// Tapping a note on the written score selects it for editing, as tapping its
+// chip in the writer does - opening the writer first if it is closed. Tapping
+// past the last note goes back to adding at the end.
+ui.score.addEventListener("click", (event) => {
+    if (!writtenOnScreen || view !== score) return;
+    const whole = score.noteAt(event.clientX, event.clientY);
+    if (whole === null) return;
+
+    if (!editor.isOpen) reopenWriter();
+    const index = editor.indexAt(whole);
+    if (index === null) {
+        if (editor.selected !== null) editor.select(editor.selected);
+    } else if (index !== editor.selected) {
+        editor.select(index);
+    }
 });
 
 // Browsers keep audio suspended until the page has been interacted with, so
@@ -460,6 +479,7 @@ async function showScore(content, label, { written = false } = {}) {
     setStatus("Rendering the score…", "busy");
     if (written) writtenOnScreen = true;
     else showingSomethingElse();
+    ui.score.classList.toggle("tappable", writtenOnScreen);
     if (typeof content === "string") currentMusicXml = content;
 
     ui.roll.hidden = true;
