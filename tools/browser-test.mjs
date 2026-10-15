@@ -369,6 +369,20 @@ async function run() {
             await page.evaluate("return document.querySelectorAll('.roll-note').length"),
             32,
         );
+        // The roll is stretched to fit; its octave labels must not be.
+        await page.send("Emulation.setDeviceMetricsOverride", {
+            width: 390, height: 844, deviceScaleFactor: 2, mobile: true,
+        });
+        const labels = await page.evaluate(`
+            await new Promise((r) => setTimeout(r, 300));
+            return [...document.querySelectorAll(".roll-label")].map((label) => ({
+                text: label.textContent,
+                tall: Math.round(label.getBoundingClientRect().height),
+            }));
+        `);
+        await page.send("Emulation.clearDeviceMetricsOverride");
+        check("octave labels on the roll", labels.map((l) => l.text), ["C2", "C3", "C4", "C5"]);
+        check("readable on a phone, not squashed to a few pixels", labels.every((l) => l.tall >= 10), true);
 
         // A MIDI file with no tempo event plays at the standard's 120 BPM, and
         // one at 62.5 BPM is not rounded: the slider has to match the sound.
