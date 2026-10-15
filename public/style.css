@@ -1041,3 +1041,9 @@ body.dropping #setup {
     color: var(--accent-ink);
     transform: none;
 }
+
+.stack.chosen {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+}

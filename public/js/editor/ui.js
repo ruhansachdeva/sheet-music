@@ -109,21 +109,42 @@ export class Editor {
 
     addNote(midi) {
         this.onPreview?.(midi);
+        if (this.joinToLast("midis", midi)) return;
+
         this.remember();
         this.score.notes.push({
-            midi,
+            midis: [midi],
             duration: this.duration,
             dots: this.dotted ? 1 : 0,
         });
         this.changed();
     }
 
+    /**
+     * While stacking, a tap joins the note before it instead of following it,
+     * which is what makes a chord. Returns whether it was taken.
+     */
+    joinToLast(field, value) {
+        if (!this.stacking) return false;
+
+        const last = this.score.notes.at(-1);
+        if (!last || last.rest || !last[field]) return false;
+        if (last[field].includes(value)) return true; // already in the chord
+
+        this.remember();
+        last[field] = [...last[field], value].sort((a, b) => a - b);
+        this.changed();
+        return true;
+    }
+
     /** Adds a hit on one piece of the kit. */
     addDrum(gm) {
         this.onPreviewDrum?.(gm);
+        if (this.joinToLast("drums", gm)) return;
+
         this.remember();
         this.score.notes.push({
-            drum: gm,
+            drums: [gm],
             duration: this.duration,
             dots: this.dotted ? 1 : 0,
         });
@@ -131,6 +152,7 @@ export class Editor {
     }
 
     addRest() {
+        this.stacking = false;
         this.remember();
         this.score.notes.push({
             rest: true,
@@ -266,6 +288,17 @@ export class Editor {
         lengths.appendChild(dot);
 
         const actions = el("div", "editor-actions");
+
+        // Stacking is what turns a run of single notes into chords.
+        const stack = el("button", "stack", "Stack");
+        stack.title = "Add the next note to the one before it";
+        stack.setAttribute("aria-pressed", String(this.stacking));
+        stack.classList.toggle("chosen", this.stacking);
+        stack.addEventListener("click", () => {
+            this.stacking = !this.stacking;
+            this.render();
+        });
+
         const rest = el("button", null, "Rest");
         rest.addEventListener("click", () => this.addRest());
         const undo = el("button", null, "Undo");
@@ -274,7 +307,7 @@ export class Editor {
         clear.addEventListener("click", () => this.clear());
 
         this.count = el("span", "editor-count");
-        actions.append(rest, undo, clear, this.count);
+        actions.append(stack, rest, undo, clear, this.count);
 
         palette.append(lengths, actions);
         return palette;
@@ -325,8 +358,17 @@ export class Editor {
 
     refreshCount() {
         if (!this.count) return;
+
         const total = this.score.notes.length;
-        this.count.textContent = total === 1 ? "1 note" : `${total} notes`;
+        const last = this.score.notes.at(-1);
+        const stacked = (last?.midis ?? last?.drums ?? []).length;
+
+        this.count.textContent =
+            this.stacking && stacked > 1
+                ? `${total} notes, last is ${stacked} together`
+                : total === 1
+                  ? "1 note"
+                  : `${total} notes`;
     }
 }
 

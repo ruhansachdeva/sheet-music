@@ -68,8 +68,8 @@ const questionPanel = new QuestionPanel(ui.questions, { onSubmit: sendAnswers })
 // what you are writing as you write it.
 const editor = new Editor(ui.editor, {
     onChange: (written) => showWrittenScore(written),
-    onPreview: (midi) => player.preview(midi).catch(() => {}),
-    onPreviewDrum: (gm) => player.previewDrum(gm).catch(() => {}),
+    onPreview: (midi) => player.preview(midi).catch(reportError),
+    onPreviewDrum: (gm) => player.previewDrum(gm).catch(reportError),
     onClose: () => {
         setStatus("Saved. Press play to hear it.", "info");
         ui.editScore.hidden = false;
@@ -170,13 +170,22 @@ ui.chooseFile.addEventListener("click", () => ui.file.click());
 ui.writeMusic.addEventListener("click", () => {
     ui.editScore.hidden = true;
     editor.open(null, writingKind());
+    // Fetch the samples now, so the first key tapped actually sounds.
+    player.warmUp().catch(reportError);
 });
 
 // Go back into something you wrote, rather than starting again.
 ui.editScore.addEventListener("click", () => {
     ui.editScore.hidden = true;
-    editor.open(editor.score);
+    editor.open(editor.score, editor.score.kind);
+    player.warmUp().catch(reportError);
 });
+
+// Browsers keep audio suspended until the page has been interacted with, so
+// take the first touch as the cue rather than waiting for a note to be played.
+for (const event of ["pointerdown", "keydown"]) {
+    window.addEventListener(event, () => player.warmUp().catch(() => {}), { once: true });
+}
 ui.takePhoto.addEventListener("click", () => ui.camera.click());
 
 ui.camera.addEventListener("change", () => {
