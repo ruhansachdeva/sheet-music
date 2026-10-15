@@ -548,8 +548,11 @@ async function transcribe(original) {
 /** A lighter model misreads more, so its reading is worth checking by eye. */
 function warnIfLighter(result) {
     if (!result.fallback) return;
+    const why = result.fallback === "limit"
+        ? "has hit its free-tier limit"
+        : "was too busy";
     setStatus(
-        `${readerName}'s usual model was too busy, so a lighter one read this, and it ` +
+        `${readerName}'s usual model ${why}, so a lighter one read this, and it ` +
             "misreads more often. Check it against the page, or try again later.",
         "info",
     );
