@@ -608,9 +608,10 @@ async function loadSample(name) {
 /**
  * Renders MusicXML (a string, or a Blob for .mxl) and makes it playable.
  * `written` says it is the writer's score, which is known before it renders.
- * `instrument` is what a reader said the page is written for, if it said.
+ * `instrument` is what a reader said the page is written for, if it said, and
+ * `ask: false` skips asking about it - for a correction of a page already asked about.
  */
-async function showScore(content, label, { written = false, instrument = null } = {}) {
+async function showScore(content, label, { written = false, instrument = null, ask = true } = {}) {
     setStatus("Rendering the score…", "busy");
     ui.instrumentCheck.hidden = true;
     if (written) writtenOnScreen = true;
@@ -627,7 +628,7 @@ async function showScore(content, label, { written = false, instrument = null } 
     ready(score.title || label, timeline, transposeNote(timeline.transposedBy));
 
     // What you write is for the instrument you chose; anything else might not be.
-    if (!written) {
+    if (!written && ask) {
         const parts = score.osmd.Sheet.Instruments.flatMap((part) => [
             part.Name,
             ...(part.SubInstruments ?? []).map((sub) => sub.name),
@@ -776,7 +777,7 @@ async function sendAnswers(answers) {
                   onProgress: stopClock.progress,
               })
             : await post("api/refine", body);
-        await showScore(result.musicxml, result.title);
+        await showScore(result.musicxml, result.title, { ask: false });
         ui.pieceName.textContent = `${result.title} — corrected`;
         offerDownload(result.title);
         questionPanel.show(result.questions);
