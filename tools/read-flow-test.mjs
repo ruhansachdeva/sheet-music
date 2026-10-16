@@ -88,6 +88,8 @@ const reader = createServer(async (request, response) => {
           : {
                 title: "Twinkle",
                 musicxml: twinkle,
+                // The reader says the page is for violin; the page has Piano picked.
+                instrument: "violin",
                 questions: [{ id: "q1", measure: 2, question: "Is bar 2 a tie or a slur?", options: ["Tie", "Slur"] }],
             };
     // Streamed as Gemini streams it: a summary of the thinking straight away,
@@ -216,6 +218,12 @@ try {
     check("the reading shows", read.piece, "Twinkle — read by Gemini");
     check("and plays", read.notes, 35);
     check("with the reader's question", read.asked, true);
+    const instrumentAsked = await evaluate(`
+        const card = document.getElementById("instrument-check");
+        return card.hidden ? null : document.getElementById("instrument-check-text").textContent;
+    `);
+    check("and, the reader having seen a violin part, a question about the instrument",
+        instrumentAsked, "This looks written for Violin, but Piano is picked.");
     check("and uploads unlocked again", read.unlocked, true);
 
     console.log("\nanswering its question");
