@@ -78,10 +78,35 @@
                 MusicXML and MIDI play straight away; photos and PDFs are read for you.
                 You can drop a file on the page too.
             </p>
-            <p id="no-reader" class="note" hidden>
-                You are on the hosted copy, which is static files only. Playing and writing
-                music works here; reading a photo or a PDF needs the app running locally
-                with an API key.
+            <!-- When nothing behind the page can read photos: say why, and offer
+                 to read them here with your own key. See app.js. -->
+            <div id="no-reader" class="note" hidden>
+                <p id="no-reader-text">
+                    This copy has no server to read photos and PDFs with.
+                </p>
+                <form id="key-form" class="key-form">
+                    <label for="key-input">Read them here with your own Gemini API key</label>
+                    <div class="key-row">
+                        <input
+                            type="password"
+                            id="key-input"
+                            autocomplete="off"
+                            spellcheck="false"
+                            placeholder="Paste your key"
+                        />
+                        <button type="submit" class="primary">Save</button>
+                    </div>
+                    <p class="key-hint">
+                        Free from
+                        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>.
+                        It stays in this browser, and is only ever sent to Google.
+                    </p>
+                    <p id="key-error" class="key-error" role="alert" hidden></p>
+                </form>
+            </div>
+            <p id="own-key" class="hint" hidden>
+                Reading photos with your Gemini key, saved in this browser.
+                <button type="button" id="forget-key" class="link">Forget it</button>
             </p>
 
             <div class="field">

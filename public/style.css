@@ -1296,3 +1296,44 @@ button.danger {
         padding: 0 var(--s2);
     }
 }
+
+/* Saving your own Gemini key, where no server can read photos. */
+.note p {
+    margin: 0;
+}
+
+.key-form {
+    display: grid;
+    gap: var(--s2);
+    margin-top: var(--s3);
+}
+
+.key-form label {
+    font-weight: 600;
+}
+
+.key-row {
+    display: flex;
+    gap: var(--s2);
+}
+
+.key-row input {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: var(--tap);
+    padding: 0 var(--s3);
+    font: inherit;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+}
+
+.key-hint a {
+    color: inherit;
+}
+
+.key-error {
+    color: var(--error);
+    font-weight: 600;
+}
