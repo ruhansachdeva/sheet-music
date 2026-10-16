@@ -64,6 +64,8 @@ export function parseResult(raw) {
     return {
         title: parsed.title || "Untitled",
         musicxml: parsed.musicxml,
+        // What the page looks written for, as the model read it.
+        instrument: typeof parsed.instrument === "string" ? parsed.instrument : "unknown",
         questions: Array.isArray(parsed.questions) ? parsed.questions : [],
         model: raw.model,
         // Why a lighter model answered instead of the usual one - "busy" or

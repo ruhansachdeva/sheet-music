@@ -118,7 +118,8 @@ class DevTools {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 this.pending.delete(id);
-                reject(new Error(`DevTools ${method} got no answer in 120s`));
+                const what = params.expression?.replace(/\s+/g, " ").slice(0, 160) ?? "";
+                reject(new Error(`DevTools ${method} got no answer in 120s ${what}`));
             }, 120000);
             this.pending.set(id, {
                 resolve: (value) => { clearTimeout(timer); resolve(value); },
@@ -255,7 +256,9 @@ const SUMMARISE = `
 async function loadSample(page, name) {
     await page.evaluate(`
         await window.sheetMusic.loadSample(${JSON.stringify(name)});
-        await new Promise((r) => requestAnimationFrame(r));
+        // A timer, not an animation frame: a tab sent to the background - by a
+        // link opening another, say - gets no frames, and the wait never ends.
+        await new Promise((r) => setTimeout(r, 50));
     `);
     return page.evaluate(SUMMARISE);
 }
@@ -897,6 +900,60 @@ async function run() {
         // Halfway along a 1000-wide roll, give or take the slider's 0.01s steps.
         check("on a piano roll, the playhead goes there too", Math.abs(rollSeek - 500) < 3, true);
         await page.send("Emulation.clearDeviceMetricsOverride");
+
+        // --- asking when the music looks written for another instrument ------
+        console.log("\nasking about the instrument");
+        const question = await page.evaluate(`
+            const select = document.getElementById("instrument");
+            const card = document.getElementById("instrument-check");
+            const pick = (value) => { select.value = value; select.dispatchEvent(new Event("change")); };
+            const state = () => ({
+                shown: !card.hidden,
+                text: card.hidden ? null : document.getElementById("instrument-check-text").textContent,
+                picked: select.value,
+            });
+            const out = {};
+
+            pick("flute");
+            await window.sheetMusic.loadSample("drum-groove.musicxml");
+            out.drums = state();
+            document.getElementById("instrument-switch").click();
+            await new Promise((r) => setTimeout(r, 200));
+            out.switched = state();
+
+            pick("flute");
+            await window.sheetMusic.loadSample("twinkle.musicxml");
+            out.twinkle = state();
+            document.getElementById("instrument-keep").click();
+            out.kept = state();
+
+            pick("piano");
+            await window.sheetMusic.loadSample("twinkle.musicxml");
+            out.matching = state();
+            await window.sheetMusic.loadSample("groove.mid");
+            out.mixedMidi = state();
+
+            // What you write yourself is never second-guessed.
+            pick("flute");
+            document.getElementById("write-music").click();
+            await new Promise((r) => setTimeout(r, 400));
+            document.querySelector(".key").click();
+            await new Promise((r) => setTimeout(r, 600));
+            out.written = state();
+            window.sheetMusic.editor.clear();
+            document.querySelector(".editor-head .primary").click();
+            pick("piano");
+            return out;
+        `);
+        check("drum music with Flute picked asks", question.drums,
+            { shown: true, text: "This looks like drum music, but Flute is picked.", picked: "flute" });
+        check("and Play it as Drums switches", question.switched, { shown: false, text: null, picked: "drums" });
+        check("a piano score with Flute picked asks too", question.twinkle,
+            { shown: true, text: "This looks written for Piano, but Flute is picked.", picked: "flute" });
+        check("and Keep keeps the pick", question.kept, { shown: false, text: null, picked: "flute" });
+        check("no question when the pick matches", question.matching.shown, false);
+        check("nor for a MIDI file with a piano and a drum kit", question.mixedMidi.shown, false);
+        check("nor for a score you write yourself", question.written.shown, false);
 
         // --- tapping a note goes there --------------------------------------
         console.log("\ntapping a note to go there");
@@ -1675,6 +1732,13 @@ async function run() {
         // Where each note and rest is drawn right now. The score re-engraves
         // when the writer opens or closes, so this is asked afresh every time.
         const drawn = () => page.evaluate(`
+            // Moving the position can set off a smooth scroll to show it:
+            // measure only once the page has come to rest.
+            let last = -1;
+            for (let i = 0; i < 40 && scrollY !== last; i++) {
+                last = scrollY;
+                await new Promise((r) => setTimeout(r, 100));
+            }
             const out = [];
             const sheet = window.sheetMusic.score.osmd.GraphicSheet;
             for (const staves of sheet.MeasureList) for (const measure of staves)

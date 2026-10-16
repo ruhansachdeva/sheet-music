@@ -128,6 +128,16 @@
 
         <p id="status" class="status" role="status" aria-live="polite" hidden></p>
 
+        <!-- Asked when the music looks written for another instrument than the
+             one picked - drum music with Flute picked, say. See app.js. -->
+        <section id="instrument-check" class="questions instrument-check" aria-labelledby="instrument-check-text" hidden>
+            <p id="instrument-check-text"></p>
+            <div class="instrument-check-actions">
+                <button type="button" id="instrument-switch" class="primary"></button>
+                <button type="button" id="instrument-keep"></button>
+            </div>
+        </section>
+
         <section id="editor" class="editor" hidden></section>
 
         <section id="questions" class="questions" hidden></section>

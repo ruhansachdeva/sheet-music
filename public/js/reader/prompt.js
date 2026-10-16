@@ -1,3 +1,5 @@
+import { INSTRUMENTS } from "../instruments.js";
+
 // What we ask the model for, and the shape we expect back. Nothing here is
 // specific to a provider, or to where the reading runs: the server's
 // providers and the page itself (reading with your own key) send this same
@@ -18,6 +20,13 @@ export const RESPONSE_SCHEMA = {
         musicxml: {
             type: "string",
             description: "The complete MusicXML 3.1 score-partwise document.",
+        },
+        instrument: {
+            type: "string",
+            enum: [...Object.keys(INSTRUMENTS), "unknown"],
+            description:
+                "The instrument the music on the page is written for - from a part name, the clef " +
+                "and range, or the notation itself - or unknown when the page does not make it clear.",
         },
         questions: {
             type: "array",
@@ -40,7 +49,7 @@ export const RESPONSE_SCHEMA = {
             },
         },
     },
-    required: ["title", "musicxml", "questions"],
+    required: ["title", "musicxml", "instrument", "questions"],
     additionalProperties: false,
 };
 
@@ -62,6 +71,8 @@ Output a complete, valid MusicXML 3.1 \`score-partwise\` document:
 - Drums and other unpitched percussion: a <score-instrument> plus <midi-instrument> per kit piece, with <midi-channel>10</midi-channel> and the General MIDI <midi-unpitched> number (counting from 1, so the bass drum is 37), notes written as <unpitched> with <display-step> and <display-octave>, and an <instrument> reference on every note.
 - Pitches at WRITTEN pitch, exactly as printed on the page. Do not transpose to concert pitch - the player handles that.
 - Dynamics, articulations, slurs and beams where you can read them.
+
+Say which instrument the page is written for in \`instrument\`, separately from the instrument it will be played on, which the user gives you. Read it from the page: a part name ("Clarinet in B♭"), the clef and range, or the notation - a percussion clef with x noteheads is a drum kit. Say unknown when the page does not make it clear. Transcribe what is printed either way: if drum notation is played back on a flute, it is still drum notation.
 
 Ask a clarifying question only when the source is genuinely ambiguous and the answer changes the notes or the timing. Good reasons to ask:
 

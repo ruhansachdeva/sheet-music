@@ -120,6 +120,15 @@ transposition (`<transpose>`, as exported parts for clarinet, horn and the like
 do) plays at that instead, whichever instrument you pick to hear it on, and the
 status line says so.
 
+**Checking the instrument** — the instrument you pick sets the sound and the
+transposition, so when a piece looks written for another one, the page asks:
+pick Flute and load *Drum groove*, and it says "This looks like drum music, but
+Flute is picked", with *Play it as Drums* and *Keep Flute*. It goes by what a
+photo's reader says the page is for, or by a file's part and instrument names
+and how many of its notes are drums, or by a MIDI file's track instruments - and
+only asks when the answer is clear: a score for several instruments, or your own
+written one, is left alone.
+
 **Drums** — click *Drum groove*. The notes on the percussion staff are read
 through the score's own `<midi-unpitched>` mapping, so the kick, snare, hi-hat
 and crash each play their own sound. Picking **Drums** in the instrument list
