@@ -360,15 +360,22 @@ function reopenWriter() {
     player.warmUp().catch(reportError);
 }
 
-// Tapping a note on the written score selects it for editing, as tapping its
-// chip in the writer does - opening the writer first if it is closed. Tapping
-// past the last note goes back to adding at the end.
+// Tapping a note pauses the music and moves to that note, so Play carries on
+// from it. On the score you wrote, with the writer open, the tap also selects
+// the note for editing, as tapping its chip does; tapping past the last note
+// goes back to adding at the end.
 ui.score.addEventListener("click", (event) => {
-    if (!writtenOnScreen || view !== score) return;
+    if (view !== score || !timeline) return;
     const whole = score.noteAt(event.clientX, event.clientY);
     if (whole === null) return;
 
-    if (!editor.isOpen) reopenWriter();
+    const step = stepFor(whole);
+    if (step) {
+        player.pause();
+        player.seek(step.time);
+    }
+
+    if (!writtenOnScreen || !editor.isOpen) return;
     const index = editor.indexAt(whole);
     if (index === null) {
         if (editor.selected !== null) editor.select(editor.selected);
@@ -376,6 +383,21 @@ ui.score.addEventListener("click", (event) => {
         editor.select(index);
     }
 });
+
+/**
+ * The cursor step for a place in the score, in whole notes. A note inside a
+ * repeat is played more than once; the pass nearest where playback is now is
+ * the one meant.
+ */
+function stepFor(whole) {
+    const here = Math.max(player.position(), 0);
+    let best = null;
+    for (const step of timeline.steps) {
+        if (Math.abs(step.at - whole) > 1e-6) continue;
+        if (!best || Math.abs(step.time - here) < Math.abs(best.time - here)) best = step;
+    }
+    return best;
+}
 
 // Browsers keep audio suspended until the page has been interacted with, so
 // take the first touch as the cue rather than waiting for a note to be played.
