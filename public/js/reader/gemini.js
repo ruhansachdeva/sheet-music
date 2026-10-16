@@ -1,10 +1,11 @@
 // Google Gemini over the REST Interactions API, for the server and the page
 // alike: nothing here needs Node, only fetch.
 //
-// Reads run in background mode. A read takes one to three minutes, and a
-// phone's browser gives up on a request that stays silent that long - so
-// rather than hold one open, this starts the interaction, which answers at
-// once with an id, and then asks after it every few seconds until it is done.
+// Reads are streamed. A read takes one to four minutes, and a phone's browser
+// gives up on a request that stays silent for about one - so the model is
+// asked to stream summaries of its thinking as it goes, which keeps data
+// arriving every few seconds and says what it is doing. (Background mode,
+// which would avoid the long request altogether, refuses images.)
 //
 // Gemini's free tier covers Flash, which takes both images and PDFs (PDFs
 // natively, up to 1000 pages), so a scan does not have to become images first.
@@ -27,10 +28,12 @@ export const DEFAULT_MODELS = ["gemini-flash-latest"];
 /**
  * Thinking tokens come out of the output budget, and at "high" the model can
  * spend the whole budget thinking and return nothing. Reading notation needs
- * some thought, so "medium" rather than "low".
+ * some thought, so "medium" rather than "low" - and even at medium, Flash has
+ * spent 31,456 tokens thinking about one page of Twinkle, so the budget is
+ * Flash's whole 65,536: at 32,768 the score came back cut off.
  */
 const DEFAULT_THINKING = "medium";
-const DEFAULT_MAX_OUTPUT_TOKENS = 32768;
+const DEFAULT_MAX_OUTPUT_TOKENS = 65536;
 
 /** Free-tier models get busy, and rate limits are per minute, so a failed
  *  request is often worth repeating after a wait. */
@@ -51,9 +54,6 @@ const BUSY_WAIT_MS = 30000;
  */
 const MAX_WAIT_MS = 60 * 1000;
 
-/** How often to ask after a read in progress, and how long to keep asking. */
-const POLL_MS = 3000;
-const READ_DEADLINE_MS = 30 * 60 * 1000;
 
 /** Why a lighter model may have to stand in, by the status that sent us to it. */
 const FALLBACK_REASONS = { 503: "busy", 429: "limit" };
@@ -64,7 +64,8 @@ const OVERLOADED = /overload|high demand|unavailable|try again later/i;
 /**
  * Reads a file with Gemini. `file` is `{ data, mimeType }`, the data base64.
  * `settings`: `apiKey`, and optionally `models`, `apiBase`, `thinking`,
- * `maxOutputTokens`, `busyPatienceMs`, `pollMs`, `fetch` and `log`.
+ * `maxOutputTokens`, `busyPatienceMs`, `fetch`, `log`, and `onProgress`,
+ * called with each heading of the model's thinking as it streams in.
  */
 export async function generate({ system, text, file, schema }, settings) {
     const config = withDefaults(settings);
@@ -81,11 +82,16 @@ export async function generate({ system, text, file, schema }, settings) {
         model,
         system_instruction: system,
         input,
-        background: true,
+        stream: true,
+        // Kept by Google only as long as the request takes.
+        store: false,
         response_format: { type: "text", mime_type: "application/json", schema: geminiSchema(schema) },
         generation_config: {
             max_output_tokens: config.maxOutputTokens,
             thinking_level: config.thinking,
+            // Summaries of the thinking, streamed as it happens: the steady
+            // trickle that keeps a phone's browser from giving up.
+            thinking_summaries: "auto",
         },
     });
 
@@ -119,16 +125,16 @@ function withDefaults(settings) {
         thinking: settings.thinking || DEFAULT_THINKING,
         maxOutputTokens: Number(settings.maxOutputTokens) || DEFAULT_MAX_OUTPUT_TOKENS,
         busyPatienceMs: Number(settings.busyPatienceMs) || BUSY_PATIENCE_MS,
-        pollMs: Number(settings.pollMs) || POLL_MS,
         fetch: settings.fetch ?? globalThis.fetch.bind(globalThis),
         log: settings.log ?? (() => {}),
+        onProgress: settings.onProgress ?? (() => {}),
     };
 }
 
 /**
- * One read with one model: start it, then wait for it to finish. Returns
- * `{ interaction }` once it has, or `{ response }` for a request Gemini
- * turned away, so the caller can try another model or explain.
+ * One read with one model: start it, then follow its stream to the end.
+ * Returns `{ interaction }` once it has finished, or `{ response }` for a
+ * request Gemini turned away, so the caller can try another model or explain.
  */
 async function read(body, config) {
     const started = Date.now();
@@ -136,7 +142,7 @@ async function read(body, config) {
         const response = await startWithRetries(body, config, started);
         if (!response.ok) return { response };
 
-        const interaction = await finish(await response.json(), config);
+        const interaction = await follow(response, config);
         // A read can also be refused after it starts, as a failed interaction.
         // Overloaded is the busy case again, and worth the same patience.
         const why = interaction.error?.message ?? interaction.errors?.[0]?.message ?? "";
@@ -155,7 +161,7 @@ async function read(body, config) {
  */
 async function startWithRetries(body, config, started) {
     for (let attempt = 0; ; attempt++) {
-        const response = await call(config, "/interactions", {
+        const response = await call(config, "/interactions?alt=sse", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body,
@@ -180,42 +186,70 @@ async function startWithRetries(body, config, started) {
     }
 }
 
-/** Asks after a read every few seconds until it is no longer running. */
-async function finish(interaction, config) {
-    const deadline = Date.now() + READ_DEADLINE_MS;
-    let misses = 0;
+/**
+ * Follows a read's event stream to its end, and returns the interaction as a
+ * finished one looks: its status, model, usage, and the text it wrote.
+ */
+async function follow(response, config) {
+    const kinds = []; // each step's type, by index
+    let text = "";
+    let finished = null;
 
-    while (interaction.status === "in_progress" || interaction.status === "queued") {
-        if (Date.now() > deadline) {
-            throw new ReadError(
-                `Gemini took longer than ${READ_DEADLINE_MS / 60000} minutes to read the page. ` +
-                    "Try a single page or a tighter crop.",
-                504,
-            );
+    const handle = (event) => {
+        if (event.error) throw new ReadError(`Gemini stopped reading (${event.error.message ?? "an error"}).`, 502);
+        switch (event.event_type) {
+            case "step.start":
+                kinds[event.index] = event.step?.type;
+                break;
+            case "step.delta":
+                if (event.delta?.type === "text" && kinds[event.index] === "model_output") {
+                    text += event.delta.text ?? "";
+                } else if (event.delta?.type === "thought_summary") {
+                    // "**Deciphering the Clef**\n\nI've determined..." - the heading.
+                    const heading = /\*\*(.+?)\*\*/.exec(event.delta.content?.text ?? "")?.[1];
+                    if (heading) config.onProgress(heading);
+                }
+                break;
+            case "interaction.completed":
+                finished = event.interaction;
+                break;
         }
-        await sleep(config.pollMs);
+    };
 
-        // A dropped connection or a passing 5xx while waiting is not the end
-        // of the read, which carries on at Google's end: ask again.
-        let response;
-        try {
-            response = await call(config, `/interactions/${interaction.id}`, { method: "GET" });
-        } catch (error) {
-            if (++misses > 10) throw error;
-            continue;
+    try {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffered = "";
+        for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffered += decoder.decode(value, { stream: true });
+            // Server-sent events: blank-line separated, data on "data:" lines.
+            let end;
+            while ((end = buffered.indexOf("\n\n")) >= 0) {
+                const data = buffered.slice(0, end).split("\n")
+                    .filter((line) => line.startsWith("data:"))
+                    .map((line) => line.slice(5).trim())
+                    .join("");
+                buffered = buffered.slice(end + 2);
+                if (data && data !== "[DONE]") handle(JSON.parse(data));
+            }
         }
-        if (!response.ok) {
-            if (RETRY_STATUSES.has(response.status) && ++misses <= 10) continue;
-            throw await describeFailure(response, interaction.model, config);
-        }
-        misses = 0;
-        interaction = await response.json();
+    } catch (error) {
+        if (error instanceof ReadError) throw error;
+        throw new ReadError(
+            `The connection to Gemini dropped part-way through the reading (${error?.message ?? "network error"}). Try again.`,
+            502,
+        );
     }
 
-    // The interaction is stored only so it can be waited on. Once read, it
-    // need not stay on Google's side - photo included.
-    call(config, `/interactions/${interaction.id}`, { method: "DELETE" }).catch(() => {});
-    return interaction;
+    if (!finished) {
+        throw new ReadError("The connection to Gemini closed before the reading was finished. Try again.", 502);
+    }
+    return {
+        ...finished,
+        steps: [{ type: "model_output", content: [{ type: "text", text }] }],
+    };
 }
 
 /** A request to the API, with the key, and network failures explained. */
