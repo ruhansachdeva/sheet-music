@@ -113,7 +113,18 @@ class DevTools {
     send(method, params = {}) {
         const id = this.nextId++;
         this.socket.send(JSON.stringify({ id, method, params }));
-        return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
+        // A call the browser never answers - a tap that opened a native popup,
+        // say - fails the run with a reason instead of hanging it for good.
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this.pending.delete(id);
+                reject(new Error(`DevTools ${method} got no answer in 120s`));
+            }, 120000);
+            this.pending.set(id, {
+                resolve: (value) => { clearTimeout(timer); resolve(value); },
+                reject: (error) => { clearTimeout(timer); reject(error); },
+            });
+        });
     }
 
     /** Evaluates an async expression in the page and returns its value. */
@@ -896,15 +907,27 @@ async function run() {
         // Real mouse events at a drawn note: the first note of bar 2.
         const tapNoteAt = async (whole) => {
             const point = await page.evaluate(`
-                document.getElementById("score").scrollIntoView({ block: "start" });
-                await new Promise((r) => setTimeout(r, 300));
+                // Moving the position can start a smooth scroll to show it:
+                // let the page come to rest before measuring where to tap.
+                let last = -1;
+                for (let i = 0; i < 40 && scrollY !== last; i++) {
+                    last = scrollY;
+                    await new Promise((r) => setTimeout(r, 100));
+                }
+                document.getElementById("score").scrollIntoView({ block: "start", behavior: "instant" });
+                await new Promise((r) => setTimeout(r, 200));
                 const sheet = window.sheetMusic.score.osmd.GraphicSheet;
                 for (const staves of sheet.MeasureList) for (const measure of staves)
                     for (const entry of measure.staffEntries) for (const voice of entry.graphicalVoiceEntries)
                         for (const note of voice.notes) {
                             if (Math.abs(note.sourceNote.getAbsoluteTimestamp().RealValue - ${whole}) > 1e-6) continue;
                             const box = note.getSVGGElement().getBoundingClientRect();
-                            return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+                            const x = box.left + box.width / 2, y = box.top + box.height / 2;
+                            // Only tap what is really the score at that point.
+                            if (!document.getElementById("score").contains(document.elementFromPoint(x, y))) {
+                                throw new Error("the note at " + ${whole} + " is covered, not tappable");
+                            }
+                            return { x, y };
                         }
                 return null;
             `);
