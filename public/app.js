@@ -26,6 +26,9 @@ const ui = {
     countIn: document.getElementById("count-in"),
     metronome: document.getElementById("metronome"),
     position: document.getElementById("position"),
+    seek: document.getElementById("seek"),
+    timeNow: document.getElementById("time-now"),
+    timeTotal: document.getElementById("time-total"),
     more: document.getElementById("more"),
     moreControls: document.getElementById("more-controls"),
     zoom: document.getElementById("zoom"),
@@ -443,6 +446,7 @@ ui.tempo.addEventListener("input", () => {
     ui.tempoValue.textContent = `${formatBpm(bpm)} BPM`;
     player.setTempo(bpm);
     ui.tempoReset.hidden = !timeline || bpm === timeline.bpm;
+    showTime();
 });
 
 ui.tempoReset.addEventListener("click", () => {
@@ -755,6 +759,8 @@ async function post(url, body) {
 /** Shared tail of every loader: hand the timeline to the player, show controls. */
 function ready(label, loadedTimeline, note = "") {
     player.setTimeline(loadedTimeline);
+    ui.seek.max = String(loadedTimeline.duration);
+    ui.seek.value = "0";
     setTempo(loadedTimeline);
 
     // Once there is music on screen it is the point of the page, so the
@@ -799,6 +805,7 @@ function setTempo(loadedTimeline) {
     ui.tempo.value = bpm;
     ui.tempoValue.textContent = `${formatBpm(bpm)} BPM`;
     player.setTempo(bpm);
+    showTime(0);
     ui.tempoReset.hidden = true;
     ui.tempoReset.textContent = loadedTimeline.scoreBpm
         ? `Reset to score tempo (${formatBpm(loadedTimeline.scoreBpm)} BPM)`
@@ -816,7 +823,46 @@ function handlePosition(time, step) {
     if (view === score) score.showStep(step);
     else if (view === pianoRoll) pianoRoll.showTime(time);
     showPosition(time, step);
+    showTime(time);
 }
+
+/**
+ * The seek bar's clock: time played and the whole length, in real seconds at
+ * the tempo chosen - so slowing the tempo makes the piece longer, as it is.
+ */
+function showTime(time = player.position()) {
+    if (!timeline) return;
+    const at = Math.min(Math.max(time, 0), timeline.duration);
+    const real = (seconds) => (seconds * timeline.bpm) / player.tempo;
+    const clock = (seconds) => {
+        const whole = Math.round(real(seconds));
+        return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+    };
+    ui.seek.value = String(at);
+    ui.timeNow.textContent = clock(at);
+    ui.timeTotal.textContent = clock(timeline.duration);
+    ui.seek.setAttribute("aria-valuetext", `${clock(at)} of ${clock(timeline.duration)}`);
+}
+
+// Sliding the seek bar moves through the piece, the highlighted notes with
+// it. Grabbing it while the music plays pauses until it is let go, so the
+// slide is silent and playing carries on from wherever it lands.
+let resumeAfterSlide = false;
+ui.seek.addEventListener("pointerdown", () => {
+    if (player.state !== "playing") return;
+    resumeAfterSlide = true;
+    player.pause();
+});
+ui.seek.addEventListener("input", () => player.seek(Number(ui.seek.value)));
+const letGo = () => {
+    if (!resumeAfterSlide) return;
+    resumeAfterSlide = false;
+    player.seek(Number(ui.seek.value));
+    Promise.resolve(player.play()).catch(reportError);
+};
+ui.seek.addEventListener("change", letGo);
+ui.seek.addEventListener("pointerup", letGo);
+ui.seek.addEventListener("pointercancel", letGo);
 
 /**
  * Offers the MusicXML on screen as a download. Worth having for a score that was
@@ -860,6 +906,7 @@ function handleState(state) {
     if (state === "stopped") {
         view?.reset();
         if (timeline) ui.position.textContent = timeline.isPianoRoll ? "0.0s" : "bar 1";
+        showTime(0);
     }
 }
 
