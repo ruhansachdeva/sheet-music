@@ -46,43 +46,61 @@ const timing = readFileSync(join(ROOT, "samples/timing-test.musicxml"), "utf8");
 const asked = [];
 // What the stand-in does: read normally, or fail the way Gemini can.
 let behaviour = "read";
+// Reads started, by id, each finishing 1.5s after it starts - long enough that
+// the page is seen mid-read - as Gemini's background mode does.
+const reads = new Map();
+
 const reader = createServer(async (request, response) => {
+    // The page on the hosted site calls Gemini straight from the browser, so
+    // the stand-in answers cross-origin requests as Gemini does.
+    const cors = {
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "content-type, x-goog-api-key",
+        "access-control-allow-methods": "GET, POST, DELETE",
+    };
+    const reply = (status, body, extra = {}) => {
+        response.writeHead(status, { "content-type": "application/json", ...cors, ...extra });
+        response.end(JSON.stringify(body));
+    };
+    if (request.method === "OPTIONS") return reply(204, {});
+
     let body = "";
     for await (const chunk of request) body += chunk;
+    const id = /\/interactions\/([^/?]+)/.exec(request.url)?.[1];
+    if (id && request.method === "DELETE") return reply(200, {});
+    if (id) {
+        const read = reads.get(id);
+        const done = Date.now() - read.started >= 1500;
+        return reply(200, done
+            ? { id, status: "completed", model: "stand-in", steps: [{ type: "model_output", content: [{ type: "text", text: JSON.stringify(read.answer) }] }] }
+            : { id, status: "in_progress", model: "stand-in" });
+    }
+
     if (behaviour === "daily limit") {
-        response.writeHead(429, { "content-type": "application/json", "retry-after": "46755" });
-        response.end(JSON.stringify({ error: { message: "Rate limit exceeded (limit: 20 requests per day on Free Tier)." } }));
-        return;
+        return reply(429, { error: { message: "Rate limit exceeded (limit: 20 requests per day on Free Tier)." } },
+            { "retry-after": "46755" });
     }
-    if (behaviour === "not music") {
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ status: "completed", steps: [{ type: "model_output", content: [{ type: "text",
-            text: JSON.stringify({ title: "A cat", musicxml: "This photo shows a cat, not sheet music.", questions: [] }) }] }] }));
-        return;
-    }
-    const { input = [] } = JSON.parse(body || "{}");
+    const { input = [], background } = JSON.parse(body || "{}");
     const text = input.find((item) => item.type === "text")?.text ?? "";
     const refining = text.includes("My answers:");
     asked.push({
         refining,
+        background,
         withImage: input.some((item) => item.type === "image"),
         answer: /My answer: (.*)/.exec(text)?.[1] ?? null,
     });
-    // Long enough that the page is seen mid-read.
-    await sleep(1500);
-    const reply = refining
-        ? { title: "Twinkle", musicxml: timing, questions: [] }
-        : {
-              title: "Twinkle",
-              musicxml: twinkle,
-              questions: [{ id: "q1", measure: 2, question: "Is bar 2 a tie or a slur?", options: ["Tie", "Slur"] }],
-          };
-    response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify({
-        status: "completed",
-        model: "stand-in",
-        steps: [{ type: "model_output", content: [{ type: "text", text: JSON.stringify(reply) }] }],
-    }));
+    const answer = behaviour === "not music"
+        ? { title: "A cat", musicxml: "This photo shows a cat, not sheet music.", questions: [] }
+        : refining
+          ? { title: "Twinkle", musicxml: timing, questions: [] }
+          : {
+                title: "Twinkle",
+                musicxml: twinkle,
+                questions: [{ id: "q1", measure: 2, question: "Is bar 2 a tie or a slur?", options: ["Tie", "Slur"] }],
+            };
+    const started = `read-${reads.size + 1}`;
+    reads.set(started, { started: Date.now(), answer });
+    return reply(200, { id: started, status: "in_progress", model: "stand-in" });
 });
 reader.listen(0);
 await once(reader, "listening");
@@ -97,6 +115,7 @@ const server = spawn(process.execPath, ["server.js"], {
         GEMINI_MODEL: "",
         GEMINI_API_BASE: `http://localhost:${reader.address().port}`,
         PROOFREAD: "0",
+        GEMINI_POLL_MS: "200",
     },
     stdio: ["ignore", "ignore", "inherit"],
 });
@@ -221,6 +240,7 @@ try {
     check("and the question is done with", answered.questionsGone, true);
 
     check("the reader got the photo both times", asked.map((a) => a.withImage), [true, true]);
+    check("in background mode, so no request is held open", asked.map((a) => a.background), [true, true]);
     check("and the answer chosen", asked.map((a) => a.answer), [null, "Tie"]);
 
     // When a read fails, the page says why, unlocks, and keeps what it had.

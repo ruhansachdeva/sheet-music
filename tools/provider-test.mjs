@@ -14,35 +14,65 @@ function check(label, actual, expected) {
 }
 
 /**
- * What the fake does next, per model: a list of statuses to answer with, the
- * last one repeating. A status can be [status, retryAfterSeconds]. Every
- * request is counted by model.
+ * What the fake does next, per model: a list of statuses to answer a read's
+ * start with, the last one repeating. A status can be [status,
+ * retryAfterSeconds]. Every start is counted by model. A started read is
+ * "in_progress" for `pollsBeforeDone` polls, then complete - or, for the
+ * status "failed", fails.
  */
 let script = {};
 let asked = {};
+let pollsBeforeDone = 2;
+const reads = new Map();
+const deleted = [];
 
 const fake = createServer(async (request, response) => {
     let body = "";
     for await (const chunk of request) body += chunk;
-    const { model } = JSON.parse(body || "{}");
+
+    // Background mode: asking after a read, and clearing it up afterwards.
+    const id = /\/interactions\/([^/]+)$/.exec(request.url)?.[1];
+    if (id && request.method === "DELETE") {
+        deleted.push(id);
+        response.end("{}");
+        return;
+    }
+    if (id) {
+        const read = reads.get(id);
+        read.polls += 1;
+        const done = read.polls > pollsBeforeDone;
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(
+            !done ? { id, status: "in_progress", model: read.model }
+            : read.fails ? { id, status: "failed", model: read.model, error: { message: "the fake gave up" } }
+            : {
+                  id,
+                  status: "completed",
+                  model: read.model,
+                  steps: [{ type: "model_output", content: [{ type: "text", text: `{"read by":"${read.model}"}` }] }],
+                  usage: { total_input_tokens: 1, total_output_tokens: 1 },
+              },
+        ));
+        return;
+    }
+
+    const { model, background } = JSON.parse(body || "{}");
     asked[model] = (asked[model] ?? 0) + 1;
+    asked.background = background;
 
     const plan = script[model] ?? [200];
     const step = plan[Math.min(asked[model] - 1, plan.length - 1)];
     // A tiny Retry-After by default, so the provider's waits take milliseconds.
     const [status, retryAfter] = Array.isArray(step) ? step : [step, 0.01];
-    if (status !== 200) {
+    if (status !== 200 && status !== "failed") {
         response.writeHead(status, { "content-type": "application/json", "retry-after": String(retryAfter) });
         response.end(JSON.stringify({ error: { message: `fake ${status}` } }));
         return;
     }
+    const started = `read-${reads.size + 1}`;
+    reads.set(started, { model, polls: 0, fails: status === "failed" });
     response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify({
-        status: "completed",
-        model,
-        steps: [{ type: "model_output", content: [{ type: "text", text: `{"read by":"${model}"}` }] }],
-        usage: { total_input_tokens: 1, total_output_tokens: 1 },
-    }));
+    response.end(JSON.stringify({ id: started, status: "in_progress", model }));
 });
 fake.listen(0);
 await once(fake, "listening");
@@ -51,6 +81,7 @@ await once(fake, "listening");
 process.env.GEMINI_API_BASE = `http://localhost:${fake.address().port}`;
 process.env.GEMINI_API_KEY = "fake";
 process.env.GEMINI_BUSY_PATIENCE_MS = "400";
+process.env.GEMINI_POLL_MS = "10";
 delete process.env.GEMINI_MODEL;
 const gemini = await import("../lib/providers/gemini.js");
 
@@ -75,6 +106,20 @@ async function read(plan, models = "") {
 const WITH_LITE = "gemini-flash-latest, gemini-flash-lite-latest";
 
 try {
+    console.log("\na read runs in the background and is polled");
+    pollsBeforeDone = 3;
+    const polled = await read({ "gemini-flash-latest": [200] });
+    const thatRead = [...reads.values()].at(-1);
+    check("it is started in background mode", asked.background, true);
+    check("asked after until it is done", thatRead.polls, 4);
+    check("and its result read", polled.model, "gemini-flash-latest");
+    // The clear-up is not waited for, so give it a moment to arrive.
+    await new Promise((r) => setTimeout(r, 100));
+    check("then cleared off Google's side", deleted.includes([...reads.keys()].at(-1)), true);
+    pollsBeforeDone = 1;
+    const failedRead = await read({ "gemini-flash-latest": ["failed"] });
+    check("a read that fails once started says so", [failedRead.error, /fake gave up/.test(failedRead.message)], [422, true]);
+
     console.log("\na busy model is waited for");
     const brief = await read({ "gemini-flash-latest": [503, 503, 503, 503, 200] });
     check("Flash answers after four busy replies", brief.model, "gemini-flash-latest");
