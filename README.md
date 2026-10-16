@@ -1,5 +1,7 @@
 # Sheet Music Player
 
+**NOTE: This is a personal site for the time being; I may expand it later on, but for now it is just an open-source personal project. To run it, you will need to fork this repo.**
+
 **[Try it live →](https://ruhansachdeva.github.io/sheet-music/)**
 
 Upload any sheet music, pick an instrument, and play it back with correct timing,
