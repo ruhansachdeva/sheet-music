@@ -217,6 +217,31 @@ export class Player {
         return this.state === "playing" ? this.pause() : this.play();
     }
 
+    /**
+     * Moves to a point in the piece, in reference seconds. Playing, it carries
+     * on from there; otherwise the position waits there - paused, so Play
+     * picks up from it rather than starting over.
+     */
+    seek(time) {
+        if (!this.timeline) return;
+        const to = Math.min(Math.max(time, 0), this.timeline.duration);
+
+        if (this.state === "playing") {
+            this.silence();
+            this.countingIn = false;
+            this.musicStart = this.ctx.currentTime + LEAD_IN - to * this.scale;
+            this.rebuildQueue(to);
+            this.tick();
+            return;
+        }
+        this.pausedAt = to;
+        if (this.state === "stopped") {
+            this.state = "paused";
+            this.onState(this.state);
+        }
+        this.onPosition(to, this.stepAt(to));
+    }
+
     /** Current position in reference seconds; negative during the count-in. */
     position() {
         if (!this.ctx) return 0;

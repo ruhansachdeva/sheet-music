@@ -727,6 +727,12 @@ body.dropping #setup {
         background: #fff;
     }
 
+    /* The docked play bar is see-through, and over that white paper a dark
+       bar turned grey enough to take its grey labels under 4.5:1. */
+    #controls {
+        background: color-mix(in srgb, var(--surface) 96%, transparent);
+    }
+
     .roll-note {
         fill: #3b82f6;
     }
@@ -1336,4 +1342,35 @@ button.danger {
 .key-error {
     color: var(--error);
     font-weight: 600;
+}
+
+/* The seek bar: time played, a slider through the piece, and its length. */
+.seek {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+}
+
+.seek input {
+    flex: 1 1 auto;
+    min-width: 0;
+    accent-color: var(--accent);
+}
+
+.time {
+    font-size: var(--text-sm);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    min-width: 2.75em;
+}
+
+#time-total {
+    text-align: right;
+}
+
+@media (min-width: 700px) {
+    /* The controls wrap in a row here; the seek bar takes a row of its own. */
+    .seek {
+        flex: 1 0 100%;
+    }
 }

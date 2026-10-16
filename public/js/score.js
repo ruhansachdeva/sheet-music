@@ -79,8 +79,10 @@ export class Score {
             // says how it is beamed keeps its own beaming.
             autoBeam: true,
             drawingParameters: "default",
-            followCursor: true,
-            cursorsOptions: [{ type: 0, color: "#2563eb", alpha: 0.25, follow: true }],
+            // Following the cursor is done here (revealCursor): OSMD's own
+            // follow never scrolled the page as the cursor is moved here.
+            followCursor: false,
+            cursorsOptions: [{ type: 0, color: "#2563eb", alpha: 0.25, follow: false }],
         });
         this.litElements = [];
         this.stepIndex = -1;
@@ -387,6 +389,25 @@ export class Score {
         }
         cursor.show();
         this.lightUpNotesUnderCursor();
+        this.revealCursor();
+    }
+
+    /**
+     * Scrolls the highlighted notes back into view once they have left it -
+     * below the screen, say, or behind the play bar on a phone. The page's
+     * scroll padding says how much the bars cover, and scrollIntoView keeps
+     * clear of them.
+     */
+    revealCursor() {
+        const element = this.osmd.cursor?.cursorElement;
+        if (!element?.isConnected) return;
+        const box = element.getBoundingClientRect();
+        const page = getComputedStyle(document.documentElement);
+        const top = parseFloat(page.scrollPaddingTop) || 0;
+        const bottom = window.innerHeight - (parseFloat(page.scrollPaddingBottom) || 0);
+        if (box.top < top || box.bottom > bottom) {
+            element.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+        }
     }
 
     lightUpNotesUnderCursor() {

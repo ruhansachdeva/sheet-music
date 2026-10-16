@@ -291,7 +291,9 @@ async function run() {
         `);
         const auditNow = () => page.evaluate(`
             const result = await axe.run(document, { resultTypes: ["violations"] });
-            return result.violations.map((v) => v.id + " (" + v.impact + ", " + v.nodes.length + ")");
+            // Name the elements, so a failure says where to look.
+            return result.violations.map((v) => v.id + " (" + v.impact + "): " +
+                v.nodes.map((n) => n.target.join(" ") + " - " + (n.any[0]?.message ?? "")).join("; "));
         `);
         console.log("\naccessibility, first run");
         check("no violations on the first-run page, light", await auditNow(), []);
@@ -827,6 +829,63 @@ async function run() {
         check("clear empties it", edited.afterClear, 0);
         check("Done closes the writer", edited.closed, true);
         check("and it can be reopened", edited.canReopen, true);
+
+        // --- the seek bar ----------------------------------------------------
+        console.log("\nthe seek bar");
+        await page.send("Emulation.setDeviceMetricsOverride", {
+            width: 390, height: 844, deviceScaleFactor: 2, mobile: true,
+        });
+        await loadSample(page, "timing-test.musicxml");
+        const seekBar = await page.evaluate(`
+            const { player, timeline, score } = window.sheetMusic;
+            const seek = document.getElementById("seek");
+            const label = (id) => document.getElementById(id).textContent;
+            const slide = async (to) => {
+                seek.value = String(to);
+                seek.dispatchEvent(new Event("input"));
+                await new Promise((r) => setTimeout(r, 900));
+            };
+            const out = { max: Number(seek.max), duration: timeline.duration, total: label("time-total") };
+            await slide(12);
+            out.after = { state: player.state, at: player.position(), now: label("time-now"),
+                step: score.stepIndex, expected: player.stepAt(12), bar: label("position") };
+            // Slowing the tempo makes the piece longer, and the clock says so.
+            const tempo = document.getElementById("tempo");
+            tempo.value = "48";
+            tempo.dispatchEvent(new Event("input"));
+            out.slower = label("time-total");
+            document.getElementById("tempo-reset").click();
+            // To the end: the highlighted note scrolls into view, clear of the bar.
+            await slide(timeline.duration - 0.5);
+            const lit = document.querySelector(".note-lit").getBoundingClientRect();
+            const bar = document.getElementById("controls").getBoundingClientRect();
+            out.endInView = lit.top >= 0 && lit.bottom <= bar.top;
+            player.stop();
+            out.afterStop = [label("time-now"), Number(seek.value)];
+            return out;
+        `);
+        check("the bar spans the whole piece", seekBar.max, seekBar.duration);
+        check("and says how long it is", seekBar.total, "0:24");
+        check("sliding it moves there, paused", [seekBar.after.state, seekBar.after.at, seekBar.after.now], ["paused", 12, "0:12"]);
+        check("with the notes there highlighted", seekBar.after.step, seekBar.after.expected);
+        check("on the second time through the repeat", seekBar.after.bar, "bar 1");
+        check("half the tempo, twice the length", seekBar.slower, "0:48");
+        check("near the end, the highlight scrolls into view", seekBar.endInView, true);
+        check("Stop goes back to the start", seekBar.afterStop, ["0:00", 0]);
+
+        await loadSample(page, "groove.mid");
+        const rollSeek = await page.evaluate(`
+            const seek = document.getElementById("seek");
+            seek.value = String(Number(seek.max) / 2);
+            seek.dispatchEvent(new Event("input"));
+            await new Promise((r) => setTimeout(r, 300));
+            const x = Number(document.querySelector(".roll-playhead").getAttribute("x1"));
+            window.sheetMusic.player.stop();
+            return x;
+        `);
+        // Halfway along a 1000-wide roll, give or take the slider's 0.01s steps.
+        check("on a piano roll, the playhead goes there too", Math.abs(rollSeek - 500) < 3, true);
+        await page.send("Emulation.clearDeviceMetricsOverride");
 
         // --- on a phone the play bar never hides the page under it -----------
         // The bar is docked to the bottom and grows when More is open, so the
@@ -1859,6 +1918,34 @@ async function run() {
             check("clicks were still due when the tempo moved", recounted.tempo.due.length > 0, true);
             check("and the count-in survives the tempo change", recounted.tempo.queued, recounted.tempo.due);
             check("and switching the metronome on", recounted.toggle.queued, recounted.toggle.due);
+
+            // Seeking while it plays carries on from the new point.
+            const seekingWhilePlaying = await page.evaluate(`
+                const { player } = window.sheetMusic;
+                await window.sheetMusic.loadSample("timing-test.musicxml");
+                await player.play();
+                await new Promise((r) => setTimeout(r, 500));
+                player.seek(15);
+                await new Promise((r) => setTimeout(r, 600));
+                const out = { state: player.state, at: player.position() };
+                // Grabbing the bar pauses; letting go plays on from where it lands.
+                const seek = document.getElementById("seek");
+                seek.dispatchEvent(new PointerEvent("pointerdown"));
+                out.grabbed = player.state;
+                seek.value = "5";
+                seek.dispatchEvent(new Event("input"));
+                seek.dispatchEvent(new Event("change"));
+                await new Promise((r) => setTimeout(r, 600));
+                out.released = { state: player.state, at: player.position() };
+                player.stop();
+                return out;
+            `);
+            check("seeking while playing carries on from there", seekingWhilePlaying.state, "playing");
+            check("at the new point", seekingWhilePlaying.at > 15 && seekingWhilePlaying.at < 16.5, true);
+            check("grabbing the seek bar pauses", seekingWhilePlaying.grabbed, "paused");
+            check("and letting go plays on from where it lands",
+                [seekingWhilePlaying.released.state, seekingWhilePlaying.released.at > 5 && seekingWhilePlaying.released.at < 6.5],
+                ["playing", true]);
 
             console.log("\npause, resume and tempo");
             const transport = await page.evaluate(`

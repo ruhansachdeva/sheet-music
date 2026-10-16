@@ -133,6 +133,12 @@
         <section id="questions" class="questions" hidden></section>
 
         <section id="controls" hidden>
+            <!-- Where you are in the piece, and how long it is; slide to move. -->
+            <div class="seek">
+                <output id="time-now" class="time">0:00</output>
+                <input type="range" id="seek" min="0" max="1" step="0.01" value="0" aria-label="Position in the piece" />
+                <output id="time-total" class="time">0:00</output>
+            </div>
             <div class="transport">
                 <button id="play" class="primary" aria-keyshortcuts="Space">Play</button>
                 <button id="stop">Stop</button>
