@@ -178,6 +178,12 @@ function buildTimeline(midi) {
     return {
         scoreBpm: bpm,
         bpm,
+        // What each track with notes is played on: its General MIDI
+        // instrument, or a drum kit on the percussion channel.
+        instrumentNames: midi.tracks
+            .filter((track) => track.notes.length)
+            .map((track) =>
+                track.instrument?.percussion || track.channel === 9 ? "drum kit" : track.instrument?.name ?? ""),
         notes,
         steps: [], // no notation to step through
         beats: beatGrid(midi),
