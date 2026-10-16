@@ -35,6 +35,15 @@ const fake = createServer(async (request, response) => {
 
     const plan = script[model] ?? [200];
     const step = plan[Math.min(asked[model] - 1, plan.length - 1)];
+    // A rate limit as a browser sees it: no Retry-After it can read, and the
+    // wait only in the body - in Google's message, or a RetryInfo detail.
+    if (step === "429, said" || step === "429, detailed") {
+        response.writeHead(429, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: step === "429, said"
+            ? { message: "Quota exceeded for requests per minute. Please retry in 0.3s." }
+            : { message: "Quota exceeded.", details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "0.3s" }] } }));
+        return;
+    }
     // A tiny Retry-After by default, so the provider's waits take milliseconds.
     const [status, retryAfter] = Array.isArray(step) ? step : [step, 0.01];
     if (typeof status === "number" && status !== 200) {
@@ -127,6 +136,17 @@ try {
     const minute = await read({ "gemini-flash-latest": [429, 429, 200] });
     check("Flash answers once the per-minute limit clears", [minute.model, minute.fallback],
         ["gemini-flash-latest", false]);
+
+    console.log("\nthe wait Google asks for is read from the body too");
+    // A browser cannot read Retry-After cross-origin. Waiting Google's 0.3s,
+    // not the 2s fallback, shows the body was read.
+    for (const kind of ["said", "detailed"]) {
+        const begun = Date.now();
+        const waited = await read({ "gemini-flash-latest": [`429, ${kind}`, 200] });
+        const took = Date.now() - begun;
+        check(`a wait ${kind === "said" ? "in the message" : "in a RetryInfo detail"} is honoured`,
+            [waited.model, took >= 300 && took < 1500], ["gemini-flash-latest", true]);
+    }
 
     console.log("\nthe daily limit is not waited out");
     let started = Date.now();
