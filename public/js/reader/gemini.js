@@ -168,12 +168,9 @@ async function startWithRetries(body, config, started) {
         });
         if (response.ok || !RETRY_STATUSES.has(response.status)) return response;
 
-        // Honour Retry-After when it can be read (a browser cannot read it
-        // cross-origin), else back off.
-        const retryAfter = Number(response.headers.get("retry-after")) * 1000;
-        const wait = Number.isFinite(retryAfter) && retryAfter > 0
-            ? retryAfter
-            : RETRY_WAITS_MS[attempt] ?? BUSY_WAIT_MS;
+        // Wait as long as Google asks, else back off.
+        const asked = await retryDelay(response);
+        const wait = asked > 0 ? asked : RETRY_WAITS_MS[attempt] ?? BUSY_WAIT_MS;
 
         const busy = response.status === 503;
         const givenUp = busy
@@ -184,6 +181,31 @@ async function startWithRetries(body, config, started) {
         config.log(`gemini: ${response.status}, retrying in ${Math.round(wait / 1000)}s`);
         await sleep(wait);
     }
+}
+
+/**
+ * How long Google asks to wait before trying again, in milliseconds, or 0.
+ * Retry-After says, where it can be read - but a browser cannot read it
+ * cross-origin - so the error body is read too: a RetryInfo detail's
+ * "retryDelay": "32s", or "Please retry in 32.5s" (or "in 12h59m15s").
+ */
+async function retryDelay(response) {
+    const header = Number(response.headers.get("retry-after"));
+    if (header > 0) return header * 1000;
+
+    let error;
+    try {
+        error = (await response.clone().json())?.error;
+    } catch {
+        return 0;
+    }
+    const detail = error?.details?.find((d) => d.retryDelay)?.retryDelay;
+    if (detail && Number.parseFloat(detail) > 0) return Number.parseFloat(detail) * 1000;
+
+    const said = /retry in (?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?/i.exec(error?.message ?? "");
+    if (!said) return 0;
+    const [, hours = 0, minutes = 0, seconds = 0] = said;
+    return ((Number(hours) * 60 + Number(minutes)) * 60 + Number(seconds)) * 1000;
 }
 
 /**
