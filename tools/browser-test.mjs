@@ -113,7 +113,18 @@ class DevTools {
     send(method, params = {}) {
         const id = this.nextId++;
         this.socket.send(JSON.stringify({ id, method, params }));
-        return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
+        // A call the browser never answers - a tap that opened a native popup,
+        // say - fails the run with a reason instead of hanging it for good.
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this.pending.delete(id);
+                reject(new Error(`DevTools ${method} got no answer in 120s`));
+            }, 120000);
+            this.pending.set(id, {
+                resolve: (value) => { clearTimeout(timer); resolve(value); },
+                reject: (error) => { clearTimeout(timer); reject(error); },
+            });
+        });
     }
 
     /** Evaluates an async expression in the page and returns its value. */
@@ -887,6 +898,66 @@ async function run() {
         check("on a piano roll, the playhead goes there too", Math.abs(rollSeek - 500) < 3, true);
         await page.send("Emulation.clearDeviceMetricsOverride");
 
+        // --- tapping a note goes there --------------------------------------
+        console.log("\ntapping a note to go there");
+        await page.send("Emulation.setDeviceMetricsOverride", {
+            width: 1280, height: 800, deviceScaleFactor: 1, mobile: false,
+        });
+        await loadSample(page, "timing-test.musicxml");
+        // Real mouse events at a drawn note: the first note of bar 2.
+        const tapNoteAt = async (whole) => {
+            const point = await page.evaluate(`
+                // Moving the position can start a smooth scroll to show it:
+                // let the page come to rest before measuring where to tap.
+                let last = -1;
+                for (let i = 0; i < 40 && scrollY !== last; i++) {
+                    last = scrollY;
+                    await new Promise((r) => setTimeout(r, 100));
+                }
+                document.getElementById("score").scrollIntoView({ block: "start", behavior: "instant" });
+                await new Promise((r) => setTimeout(r, 200));
+                const sheet = window.sheetMusic.score.osmd.GraphicSheet;
+                for (const staves of sheet.MeasureList) for (const measure of staves)
+                    for (const entry of measure.staffEntries) for (const voice of entry.graphicalVoiceEntries)
+                        for (const note of voice.notes) {
+                            if (Math.abs(note.sourceNote.getAbsoluteTimestamp().RealValue - ${whole}) > 1e-6) continue;
+                            const box = note.getSVGGElement().getBoundingClientRect();
+                            const x = box.left + box.width / 2, y = box.top + box.height / 2;
+                            // Only tap what is really the score at that point.
+                            if (!document.getElementById("score").contains(document.elementFromPoint(x, y))) {
+                                throw new Error("the note at " + ${whole} + " is covered, not tappable");
+                            }
+                            return { x, y };
+                        }
+                return null;
+            `);
+            for (const type of ["mousePressed", "mouseReleased"]) {
+                await page.send("Input.dispatchMouseEvent", { type, x: point.x, y: point.y, button: "left", clickCount: 1 });
+            }
+            await new Promise((r) => setTimeout(r, 400));
+            return page.evaluate(`
+                const { player, score, timeline } = window.sheetMusic;
+                return {
+                    state: player.state,
+                    at: Math.round(player.position() * 100) / 100,
+                    step: score.stepIndex,
+                    bar: document.getElementById("position").textContent,
+                    now: document.getElementById("time-now").textContent,
+                };
+            `);
+        };
+        // Bar 2 starts a whole note in; at 96 BPM a bar is 2.5 seconds.
+        const tapped = await tapNoteAt(1);
+        check("tapping a note goes there, paused", [tapped.state, tapped.at, tapped.bar, tapped.now],
+            ["paused", 2.5, "bar 2", "0:03"]);
+        // Bars 1-4 repeat. From the second time through, the same note means
+        // that pass, not the first.
+        await page.evaluate(`window.sheetMusic.player.seek(12)`);
+        const second = await tapNoteAt(1);
+        check("in a repeat, the pass nearest where you are", second.at, 12.5);
+        await page.evaluate(`window.sheetMusic.player.stop()`);
+        await page.send("Emulation.clearDeviceMetricsOverride");
+
         // --- on a phone the play bar never hides the page under it -----------
         // The bar is docked to the bottom and grows when More is open, so the
         // room left for it, and where scrolling stops, follow its real height.
@@ -1655,10 +1726,24 @@ async function run() {
             await new Promise((r) => setTimeout(r, 600));
         `);
 
+        // With the writer shut, a tap goes to the note: paused there, lit.
         let target = await noteAt(0.25);
+        const tapShut = await tapAt(target.x, target.y);
+        const wentThere = await page.evaluate(`
+            const { player, score } = window.sheetMusic;
+            return { state: player.state, at: Math.round(player.position() * 100) / 100, step: score.stepIndex };
+        `);
+        check("with the writer shut, a tap goes to the note, paused there",
+            [tapShut.open, wentThere.state, wentThere.at, wentThere.step], [false, "paused", 0.6, 1]);
+
+        // With it open, the tap also selects the note for editing.
+        await page.evaluate(`
+            document.getElementById("edit-score").click();
+            await new Promise((r) => setTimeout(r, 700));
+        `);
+        target = await noteAt(0.25);
         const tapD = await tapAt(target.x, target.y);
-        check("tapping a note with the writer shut opens it", tapD.open, true);
-        check("with that note selected", [tapD.selected, tapD.chip], [1, "D4"]);
+        check("with the writer open, it is selected for editing too", [tapD.open, tapD.selected, tapD.chip], [true, 1, "D4"]);
 
         target = await noteAt(1);
         const tapTied = await tapAt(target.x, target.y);
@@ -1940,6 +2025,29 @@ async function run() {
                 player.stop();
                 return out;
             `);
+            // Tapping a note while it plays pauses there.
+            const tappedWhilePlaying = await page.evaluate(`
+                const { player } = window.sheetMusic;
+                await player.play();
+                await new Promise((r) => setTimeout(r, 400));
+                const sheet = window.sheetMusic.score.osmd.GraphicSheet;
+                let target = null;
+                for (const staves of sheet.MeasureList) for (const measure of staves)
+                    for (const entry of measure.staffEntries) for (const voice of entry.graphicalVoiceEntries)
+                        for (const note of voice.notes) {
+                            if (!target && Math.abs(note.sourceNote.getAbsoluteTimestamp().RealValue - 1) < 1e-6) {
+                                target = note.getSVGGElement().getBoundingClientRect();
+                            }
+                        }
+                document.getElementById("score").dispatchEvent(new MouseEvent("click", {
+                    bubbles: true, clientX: target.left + target.width / 2, clientY: target.top + target.height / 2,
+                }));
+                await new Promise((r) => setTimeout(r, 300));
+                const out = { state: player.state, at: player.position() };
+                player.stop();
+                return out;
+            `);
+            check("tapping a note while it plays pauses there", [tappedWhilePlaying.state, tappedWhilePlaying.at], ["paused", 2.5]);
             check("seeking while playing carries on from there", seekingWhilePlaying.state, "playing");
             check("at the new point", seekingWhilePlaying.at > 15 && seekingWhilePlaying.at < 16.5, true);
             check("grabbing the seek bar pauses", seekingWhilePlaying.grabbed, "paused");

@@ -283,7 +283,12 @@ export class Score {
             // the cursor steps are exactly those positions.
             const isCursorStep = iterator.CurrentVisibleVoiceEntries().length > 0;
             const stepIndex = isCursorStep ? steps.length : -1;
-            if (isCursorStep) steps.push({ time, measure: measure.MeasureNumber });
+            // `at` is where the step sits in the score as written, in whole
+            // notes: the same for each pass through a repeat, and what a tap
+            // on a note is matched against.
+            if (isCursorStep) {
+                steps.push({ time, measure: measure.MeasureNumber, at: iterator.CurrentSourceTimestamp.RealValue });
+            }
 
             let longestHere = 0;
             for (const voiceEntry of iterator.CurrentVoiceEntries) {
