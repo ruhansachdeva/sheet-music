@@ -9,6 +9,7 @@ import { QuestionPanel } from "./js/questions.js";
 import { Editor } from "./js/editor/ui.js";
 import { preparePhoto } from "./js/photo.js";
 import * as ownKey from "./js/reader/browser.js";
+import { guessInstrument } from "./js/instrument-guess.js";
 
 const ui = {
     file: document.getElementById("file"),
@@ -44,6 +45,10 @@ const ui = {
     samples: document.querySelectorAll("[data-sample]"),
     setupWrap: document.getElementById("setup-wrap"),
     noReader: document.getElementById("no-reader"),
+    instrumentCheck: document.getElementById("instrument-check"),
+    instrumentCheckText: document.getElementById("instrument-check-text"),
+    instrumentSwitch: document.getElementById("instrument-switch"),
+    instrumentKeep: document.getElementById("instrument-keep"),
     noReaderText: document.getElementById("no-reader-text"),
     keyForm: document.getElementById("key-form"),
     keyInput: document.getElementById("key-input"),
@@ -603,9 +608,11 @@ async function loadSample(name) {
 /**
  * Renders MusicXML (a string, or a Blob for .mxl) and makes it playable.
  * `written` says it is the writer's score, which is known before it renders.
+ * `instrument` is what a reader said the page is written for, if it said.
  */
-async function showScore(content, label, { written = false } = {}) {
+async function showScore(content, label, { written = false, instrument = null } = {}) {
     setStatus("Rendering the score…", "busy");
+    ui.instrumentCheck.hidden = true;
     if (written) writtenOnScreen = true;
     else showingSomethingElse();
     ui.score.classList.toggle("tappable", writtenOnScreen);
@@ -618,7 +625,54 @@ async function showScore(content, label, { written = false } = {}) {
     timeline = await score.load(content);
     view = score;
     ready(score.title || label, timeline, transposeNote(timeline.transposedBy));
+
+    // What you write is for the instrument you chose; anything else might not be.
+    if (!written) {
+        const parts = score.osmd.Sheet.Instruments.flatMap((part) => [
+            part.Name,
+            ...(part.SubInstruments ?? []).map((sub) => sub.name),
+        ]);
+        askAboutInstrument(instrument && instrument !== "unknown"
+            ? instrument
+            : guessInstrument({ names: parts, drumShare: drumShare(timeline) }));
+    }
 }
+
+function drumShare(loaded) {
+    const notes = loaded.notes.length;
+    return notes ? loaded.notes.filter((note) => note.drumKey !== null).length / notes : 0;
+}
+
+/**
+ * Asks, when a piece looks written for another instrument than the one
+ * picked - drum music with Flute picked, say - which it should play as. The
+ * pick sets the sound and the transposition, so a wrong one is worth a word.
+ */
+let suggestedInstrument = null;
+function askAboutInstrument(guess) {
+    const picked = ui.instrument.value;
+    if (!guess || guess === picked || !INSTRUMENTS[guess]) return;
+
+    suggestedInstrument = guess;
+    const name = (key) => INSTRUMENTS[key].label;
+    ui.instrumentCheckText.textContent = guess === "drums"
+        ? `This looks like drum music, but ${name(picked)} is picked.`
+        : `This looks written for ${name(guess)}, but ${name(picked)} is picked.`;
+    ui.instrumentSwitch.textContent = `Play it as ${name(guess)}`;
+    ui.instrumentKeep.textContent = `Keep ${name(picked)}`;
+    ui.instrumentCheck.hidden = false;
+}
+
+ui.instrumentSwitch.addEventListener("click", () => {
+    ui.instrumentCheck.hidden = true;
+    ui.instrument.value = suggestedInstrument;
+    // The picker's own handler loads the sound and remembers the choice.
+    ui.instrument.dispatchEvent(new Event("change"));
+});
+
+ui.instrumentKeep.addEventListener("click", () => {
+    ui.instrumentCheck.hidden = true;
+});
 
 /**
  * Anything newly put on screen is not the written score until shown to be,
@@ -627,6 +681,7 @@ async function showScore(content, label, { written = false } = {}) {
 function showingSomethingElse() {
     writtenOnScreen = false;
     ui.editScore.hidden = true;
+    ui.instrumentCheck.hidden = true;
 }
 
 /** What the status line says about a score that sets its own transposition. */
@@ -651,6 +706,7 @@ async function showPianoRoll(arrayBuffer, label) {
     timeline = await pianoRoll.load(arrayBuffer);
     view = pianoRoll;
     ready(pianoRoll.title || label, timeline, "MIDI is already at concert pitch, so it plays untransposed.");
+    askAboutInstrument(guessInstrument({ names: timeline.instrumentNames, drumShare: drumShare(timeline) }));
 }
 
 /** A photo or a PDF: it is read into MusicXML, then rendered like any score. */
@@ -675,7 +731,7 @@ async function transcribe(original) {
         stopClock();
         setUploadsEnabled(true);
     }
-    await showScore(result.musicxml, result.title);
+    await showScore(result.musicxml, result.title, { instrument: result.instrument });
     sourceFile = file;
     ui.pieceName.textContent = result.title
         ? `${result.title} — read by ${readerName}`

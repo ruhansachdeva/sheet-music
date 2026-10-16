@@ -1374,3 +1374,15 @@ button.danger {
         flex: 1 0 100%;
     }
 }
+
+/* The question asked when the music looks written for another instrument. */
+.instrument-check p {
+    margin: 0 0 var(--s3);
+    color: var(--warn-ink);
+}
+
+.instrument-check-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+}
