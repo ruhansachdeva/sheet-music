@@ -14,65 +14,55 @@ function check(label, actual, expected) {
 }
 
 /**
- * What the fake does next, per model: a list of statuses to answer a read's
- * start with, the last one repeating. A status can be [status,
- * retryAfterSeconds]. Every start is counted by model. A started read is
- * "in_progress" for `pollsBeforeDone` polls, then complete - or, for the
- * status "failed", fails.
+ * What the fake does next, per model: a list of statuses to answer a read
+ * with, the last one repeating. A status can be [status, retryAfterSeconds].
+ * A 200 streams the read as Gemini does - a thinking summary, the answer in
+ * pieces, then "completed" - and "failed" streams a read that fails, "cut" one
+ * whose connection drops before the end. Every request is counted by model.
  */
 let script = {};
 let asked = {};
-let pollsBeforeDone = 2;
-const reads = new Map();
-const deleted = [];
+
+/** One server-sent event, as Gemini sends them. */
+const sse = (event) => `event: ${event.event_type}\ndata: ${JSON.stringify(event)}\n\n`;
 
 const fake = createServer(async (request, response) => {
     let body = "";
     for await (const chunk of request) body += chunk;
-
-    // Background mode: asking after a read, and clearing it up afterwards.
-    const id = /\/interactions\/([^/]+)$/.exec(request.url)?.[1];
-    if (id && request.method === "DELETE") {
-        deleted.push(id);
-        response.end("{}");
-        return;
-    }
-    if (id) {
-        const read = reads.get(id);
-        read.polls += 1;
-        const done = read.polls > pollsBeforeDone;
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify(
-            !done ? { id, status: "in_progress", model: read.model }
-            : read.fails ? { id, status: "failed", model: read.model, error: { message: "the fake gave up" } }
-            : {
-                  id,
-                  status: "completed",
-                  model: read.model,
-                  steps: [{ type: "model_output", content: [{ type: "text", text: `{"read by":"${read.model}"}` }] }],
-                  usage: { total_input_tokens: 1, total_output_tokens: 1 },
-              },
-        ));
-        return;
-    }
-
-    const { model, background } = JSON.parse(body || "{}");
+    const { model, stream, store, generation_config: config } = JSON.parse(body || "{}");
     asked[model] = (asked[model] ?? 0) + 1;
-    asked.background = background;
+    asked.last = { stream, store, summaries: config?.thinking_summaries, budget: config?.max_output_tokens };
 
     const plan = script[model] ?? [200];
     const step = plan[Math.min(asked[model] - 1, plan.length - 1)];
     // A tiny Retry-After by default, so the provider's waits take milliseconds.
     const [status, retryAfter] = Array.isArray(step) ? step : [step, 0.01];
-    if (status !== 200 && status !== "failed") {
+    if (typeof status === "number" && status !== 200) {
         response.writeHead(status, { "content-type": "application/json", "retry-after": String(retryAfter) });
         response.end(JSON.stringify({ error: { message: `fake ${status}` } }));
         return;
     }
-    const started = `read-${reads.size + 1}`;
-    reads.set(started, { model, polls: 0, fails: status === "failed" });
-    response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify({ id: started, status: "in_progress", model }));
+
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    const answer = `{"read by":"${model}"}`;
+    response.write(sse({ event_type: "interaction.created", interaction: { id: "x", model } }));
+    response.write(sse({ event_type: "step.start", index: 0, step: { type: "thought" } }));
+    response.write(sse({ event_type: "step.delta", index: 0, delta: { type: "thought_summary", content: { text: "**Reading the Clef**\n\nIt is treble." } } }));
+    response.write(sse({ event_type: "step.stop", index: 0 }));
+    response.write(sse({ event_type: "step.start", index: 1, step: { type: "model_output" } }));
+    // The answer in two pieces, the first split mid-event, as a network may.
+    const first = sse({ event_type: "step.delta", index: 1, delta: { type: "text", text: answer.slice(0, 6) } });
+    response.write(first.slice(0, 20));
+    response.write(first.slice(20));
+    if (status === "cut") return response.end();
+    response.write(sse({ event_type: "step.delta", index: 1, delta: { type: "text", text: answer.slice(6) } }));
+    response.write(sse({ event_type: "step.stop", index: 1 }));
+    response.end(sse({
+        event_type: "interaction.completed",
+        interaction: status === "failed"
+            ? { id: "x", model, status: "failed", error: { message: "the fake gave up" } }
+            : { id: "x", model, status: "completed", usage: { total_input_tokens: 1, total_output_tokens: 1 } },
+    }));
 });
 fake.listen(0);
 await once(fake, "listening");
@@ -81,7 +71,6 @@ await once(fake, "listening");
 process.env.GEMINI_API_BASE = `http://localhost:${fake.address().port}`;
 process.env.GEMINI_API_KEY = "fake";
 process.env.GEMINI_BUSY_PATIENCE_MS = "400";
-process.env.GEMINI_POLL_MS = "10";
 delete process.env.GEMINI_MODEL;
 const gemini = await import("../lib/providers/gemini.js");
 
@@ -106,19 +95,16 @@ async function read(plan, models = "") {
 const WITH_LITE = "gemini-flash-latest, gemini-flash-lite-latest";
 
 try {
-    console.log("\na read runs in the background and is polled");
-    pollsBeforeDone = 3;
-    const polled = await read({ "gemini-flash-latest": [200] });
-    const thatRead = [...reads.values()].at(-1);
-    check("it is started in background mode", asked.background, true);
-    check("asked after until it is done", thatRead.polls, 4);
-    check("and its result read", polled.model, "gemini-flash-latest");
-    // The clear-up is not waited for, so give it a moment to arrive.
-    await new Promise((r) => setTimeout(r, 100));
-    check("then cleared off Google's side", deleted.includes([...reads.keys()].at(-1)), true);
-    pollsBeforeDone = 1;
+    console.log("\na read is streamed");
+    const streamed = await read({ "gemini-flash-latest": [200] });
+    check("it is streamed, and not stored", [asked.last.stream, asked.last.store], [true, false]);
+    check("with the thinking summarised as it goes", asked.last.summaries, "auto");
+    check("and the whole of Flash's output budget", asked.last.budget, 65536);
+    check("the answer is put together from its pieces", streamed.model, "gemini-flash-latest");
     const failedRead = await read({ "gemini-flash-latest": ["failed"] });
-    check("a read that fails once started says so", [failedRead.error, /fake gave up/.test(failedRead.message)], [422, true]);
+    check("a read that fails part-way says so", [failedRead.error, /fake gave up/.test(failedRead.message)], [422, true]);
+    const cut = await read({ "gemini-flash-latest": ["cut"] });
+    check("a connection that drops before the end says so", [cut.error, /closed before/.test(cut.message)], [502, true]);
 
     console.log("\na busy model is waited for");
     const brief = await read({ "gemini-flash-latest": [503, 503, 503, 503, 200] });
