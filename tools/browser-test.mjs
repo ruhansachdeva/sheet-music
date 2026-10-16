@@ -887,6 +887,54 @@ async function run() {
         check("on a piano roll, the playhead goes there too", Math.abs(rollSeek - 500) < 3, true);
         await page.send("Emulation.clearDeviceMetricsOverride");
 
+        // --- tapping a note goes there --------------------------------------
+        console.log("\ntapping a note to go there");
+        await page.send("Emulation.setDeviceMetricsOverride", {
+            width: 1280, height: 800, deviceScaleFactor: 1, mobile: false,
+        });
+        await loadSample(page, "timing-test.musicxml");
+        // Real mouse events at a drawn note: the first note of bar 2.
+        const tapNoteAt = async (whole) => {
+            const point = await page.evaluate(`
+                document.getElementById("score").scrollIntoView({ block: "start" });
+                await new Promise((r) => setTimeout(r, 300));
+                const sheet = window.sheetMusic.score.osmd.GraphicSheet;
+                for (const staves of sheet.MeasureList) for (const measure of staves)
+                    for (const entry of measure.staffEntries) for (const voice of entry.graphicalVoiceEntries)
+                        for (const note of voice.notes) {
+                            if (Math.abs(note.sourceNote.getAbsoluteTimestamp().RealValue - ${whole}) > 1e-6) continue;
+                            const box = note.getSVGGElement().getBoundingClientRect();
+                            return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+                        }
+                return null;
+            `);
+            for (const type of ["mousePressed", "mouseReleased"]) {
+                await page.send("Input.dispatchMouseEvent", { type, x: point.x, y: point.y, button: "left", clickCount: 1 });
+            }
+            await new Promise((r) => setTimeout(r, 400));
+            return page.evaluate(`
+                const { player, score, timeline } = window.sheetMusic;
+                return {
+                    state: player.state,
+                    at: Math.round(player.position() * 100) / 100,
+                    step: score.stepIndex,
+                    bar: document.getElementById("position").textContent,
+                    now: document.getElementById("time-now").textContent,
+                };
+            `);
+        };
+        // Bar 2 starts a whole note in; at 96 BPM a bar is 2.5 seconds.
+        const tapped = await tapNoteAt(1);
+        check("tapping a note goes there, paused", [tapped.state, tapped.at, tapped.bar, tapped.now],
+            ["paused", 2.5, "bar 2", "0:03"]);
+        // Bars 1-4 repeat. From the second time through, the same note means
+        // that pass, not the first.
+        await page.evaluate(`window.sheetMusic.player.seek(12)`);
+        const second = await tapNoteAt(1);
+        check("in a repeat, the pass nearest where you are", second.at, 12.5);
+        await page.evaluate(`window.sheetMusic.player.stop()`);
+        await page.send("Emulation.clearDeviceMetricsOverride");
+
         // --- on a phone the play bar never hides the page under it -----------
         // The bar is docked to the bottom and grows when More is open, so the
         // room left for it, and where scrolling stops, follow its real height.
@@ -1655,10 +1703,24 @@ async function run() {
             await new Promise((r) => setTimeout(r, 600));
         `);
 
+        // With the writer shut, a tap goes to the note: paused there, lit.
         let target = await noteAt(0.25);
+        const tapShut = await tapAt(target.x, target.y);
+        const wentThere = await page.evaluate(`
+            const { player, score } = window.sheetMusic;
+            return { state: player.state, at: Math.round(player.position() * 100) / 100, step: score.stepIndex };
+        `);
+        check("with the writer shut, a tap goes to the note, paused there",
+            [tapShut.open, wentThere.state, wentThere.at, wentThere.step], [false, "paused", 0.6, 1]);
+
+        // With it open, the tap also selects the note for editing.
+        await page.evaluate(`
+            document.getElementById("edit-score").click();
+            await new Promise((r) => setTimeout(r, 700));
+        `);
+        target = await noteAt(0.25);
         const tapD = await tapAt(target.x, target.y);
-        check("tapping a note with the writer shut opens it", tapD.open, true);
-        check("with that note selected", [tapD.selected, tapD.chip], [1, "D4"]);
+        check("with the writer open, it is selected for editing too", [tapD.open, tapD.selected, tapD.chip], [true, 1, "D4"]);
 
         target = await noteAt(1);
         const tapTied = await tapAt(target.x, target.y);
