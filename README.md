@@ -7,10 +7,11 @@
 Upload any sheet music, pick an instrument, and play it back with correct timing,
 a metronome, and the current note lit up on the score.
 
-> The live site is static files on GitHub Pages, so it plays MusicXML and MIDI,
-> writes scores, runs the metronome and highlights notes - everything that runs
-> in the browser. Reading a photo or a PDF needs the server and an API key, so
-> for that, run it locally as below. The page tells you which copy you are on.
+> The live site is static files on GitHub Pages: it plays MusicXML and MIDI,
+> writes scores, runs the metronome and highlights notes. To read photos and
+> PDFs there too, paste your own free Gemini API key into the page once on each
+> device - it stays in that browser and is only ever sent to Google. Running it
+> locally with a key in `.env`, as below, works without that.
 
 - **MusicXML** (`.musicxml`, `.xml`, `.mxl`) and **MIDI** (`.mid`, `.midi`) load
   straight in the browser.
@@ -72,7 +73,7 @@ Optional overrides, none of them usually needed:
 | --- | --- | --- |
 | `GEMINI_MODEL` | `gemini-flash-latest` | Use another model, or list several, comma-separated, to fall through when one is busy or out of requests. The error message lists what your key can reach. |
 | `GEMINI_THINKING` | `medium` | Thinking tokens come out of the output budget - at `high` the model can spend the lot thinking and return nothing. |
-| `GEMINI_MAX_OUTPUT_TOKENS` | `32768` | Raise it for very dense pages. |
+| `GEMINI_MAX_OUTPUT_TOKENS` | `65536` | Flash's maximum. Thinking comes out of it: at 32768, Flash thought for 31,456 tokens over one page of Twinkle and the score came back cut off. |
 | `GEMINI_BUSY_PATIENCE_MS` | `300000` | How long to wait for a busy model before giving up on it. |
 | `GEMINI_API_BASE` | Google's v1beta endpoint | Send requests through a proxy. |
 
@@ -198,7 +199,8 @@ npm test                 # drives the app in headless Chrome
 npm run test:audio       # also plays, and watches the audio clock and cursor
 npm run test:editor      # the note writer's model and MusicXML output
 npm run test:provider    # how a busy Gemini is handled, against a local fake
-npm run test:read-flow   # photo -> reading -> question -> answer, against a local fake
+npm run test:read-flow   # photo -> reading -> question -> answer, against a local fake,
+                         # through the server and on the hosted copy with your own key
 npm run test:transcribe  # end to end through the model - needs a key
 npm run test:accuracy    # how accurately a page is read back - needs a key
 ```
@@ -294,10 +296,22 @@ instruments and the drum machine, and
 ## The hosted site
 
 Every push to `main` publishes `public/` and `samples/` to GitHub Pages through
-[`.github/workflows/pages.yml`](.github/workflows/pages.yml), after the sample
-and note-writer checks pass. Nothing secret goes near it: the API key lives only
-in your local `.env`, never in the browser bundle, which is exactly why reading
-photos cannot work there.
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml), after the sample,
+note-writer and provider checks pass. Nothing secret goes near it.
+
+There is no server there, so to read photos the page offers to take your own
+Gemini key from [Google AI Studio](https://aistudio.google.com/apikey). It checks
+the key with Google (listing models, which costs no readings), keeps it in that
+browser's storage, and from then on reads photos and PDFs in the page itself -
+the same prompts, client and checks the server uses, from `public/js/reader/`.
+**Forget it** removes the key. Since it lives in the browser, use it on your own
+devices, not shared ones.
+
+Reads are streamed. One takes one to four minutes, and a phone's browser drops a
+request that stays silent for about a minute, so the model streams summaries of
+its thinking as it goes: data arrives every few seconds, and the status line
+shows what it is working on ("Defining the Measure Structure"). Requests are
+sent with `store: false`, so Google keeps nothing once the read is done.
 
 ## On a phone
 

@@ -8,6 +8,7 @@ import { Player } from "./js/player.js";
 import { QuestionPanel } from "./js/questions.js";
 import { Editor } from "./js/editor/ui.js";
 import { preparePhoto } from "./js/photo.js";
+import * as ownKey from "./js/reader/browser.js";
 
 const ui = {
     file: document.getElementById("file"),
@@ -40,6 +41,12 @@ const ui = {
     samples: document.querySelectorAll("[data-sample]"),
     setupWrap: document.getElementById("setup-wrap"),
     noReader: document.getElementById("no-reader"),
+    noReaderText: document.getElementById("no-reader-text"),
+    keyForm: document.getElementById("key-form"),
+    keyInput: document.getElementById("key-input"),
+    keyError: document.getElementById("key-error"),
+    ownKey: document.getElementById("own-key"),
+    forgetKey: document.getElementById("forget-key"),
     writeMusic: document.getElementById("write-music"),
     editor: document.getElementById("editor"),
     setupTitle: document.getElementById("setup-title"),
@@ -208,6 +215,15 @@ let canRead = true;
 /** The provider doing the reading, as the server names it. */
 let readerName = "the reader";
 
+/**
+ * True when photos are read here in the page, with a key saved in this
+ * browser, rather than by a server.
+ */
+let readsHere = false;
+
+/** What the page says when nothing can read photos, by whether a server is there. */
+let noReaderText = "";
+
 async function checkReader() {
     // Three states, and they need different explanations: no server at all
     // (the hosted static build), a server with no key, or a working reader.
@@ -224,19 +240,69 @@ async function checkReader() {
         served = false;
         canRead = false;
     }
-
     if (canRead) return;
 
-    ui.noReader.textContent = served
-        ? "No API key is set, so photos and PDFs cannot be read. Add one to .env and " +
-          "restart - see the README. Playing and writing music works either way."
-        : "This hosted copy is static files only. Playing and writing music works here; " +
-          "reading a photo or a PDF needs the app running locally with an API key.";
+    noReaderText = served
+        ? "No API key is set in .env, so the server cannot read photos and PDFs. Add one " +
+          "there and restart, or read them here in the browser instead."
+        : "This is the hosted copy, so there is no server to read photos and PDFs with. " +
+          "Playing and writing music works without one.";
+
+    // A key saved here earlier: read in the page, no server needed.
+    if (ownKey.savedKey()) readHere();
+    else cannotRead();
+}
+
+/** Photos and PDFs are read in this page, with the saved key. */
+function readHere() {
+    readsHere = true;
+    canRead = true;
+    readerName = "Gemini";
+    ui.noReader.hidden = true;
+    ui.ownKey.hidden = false;
+    ui.takePhoto.hidden = !hasCamera();
+    ui.file.accept = ".musicxml,.xml,.mxl,.mid,.midi,image/*,application/pdf";
+}
+
+/** Nothing can read photos: say so, and offer a key. */
+function cannotRead() {
+    readsHere = false;
+    canRead = false;
+    ui.noReaderText.textContent = noReaderText;
     ui.noReader.hidden = false;
+    ui.ownKey.hidden = true;
     ui.takePhoto.hidden = true;
     // Leave the file picker, but stop it offering what it cannot do.
     ui.file.accept = ".musicxml,.xml,.mxl,.mid,.midi";
 }
+
+ui.keyForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const key = ui.keyInput.value.trim();
+    if (!key) return;
+
+    const save = ui.keyForm.querySelector("button");
+    save.disabled = true;
+    ui.keyError.hidden = true;
+    const problem = await ownKey.checkKey(key)
+        ?? (ownKey.saveKey(key) ? null : "This browser would not save the key - private browsing, perhaps.");
+    save.disabled = false;
+
+    if (problem) {
+        ui.keyError.textContent = problem;
+        ui.keyError.hidden = false;
+        return;
+    }
+    ui.keyInput.value = "";
+    readHere();
+    setStatus("Key saved. Photos and PDFs are read right here now.", "info");
+});
+
+ui.forgetKey.addEventListener("click", () => {
+    ownKey.forgetKey();
+    cannotRead();
+    setStatus("The key is gone from this browser.", "info");
+});
 
 checkReader();
 
@@ -324,7 +390,10 @@ ui.camera.addEventListener("change", () => {
 
 // Only offer the camera where there is one: a desktop browser ignores the
 // capture attribute, so the button would just reopen the file dialog.
-if (window.matchMedia?.("(pointer: coarse)").matches && navigator.mediaDevices?.getUserMedia) {
+function hasCamera() {
+    return Boolean(window.matchMedia?.("(pointer: coarse)").matches && navigator.mediaDevices?.getUserMedia);
+}
+if (hasCamera()) {
     ui.takePhoto.hidden = false;
     ui.chooseFile.classList.remove("primary");
 }
@@ -471,7 +540,7 @@ async function loadFile(file) {
             await showPianoRoll(await file.arrayBuffer(), file.name);
         } else if (file.type.startsWith("image/") || file.type === "application/pdf") {
             if (!canRead) {
-                setStatus(ui.noReader.textContent.trim(), "error");
+                setStatus(`${noReaderText} Save a Gemini key above to read ${file.name} here.`, "error");
                 return;
             }
             await transcribe(file);
@@ -573,7 +642,9 @@ async function transcribe(original) {
     const stopClock = showElapsed(`Reading your sheet music with ${readerName}`);
     let result;
     try {
-        result = await post("api/transcribe", body);
+        result = readsHere
+            ? await ownKey.transcribe({ file, instrument: ui.instrument.value, onProgress: stopClock.progress })
+            : await post("api/transcribe", body);
     } finally {
         stopClock();
         setUploadsEnabled(true);
@@ -614,7 +685,15 @@ async function sendAnswers(answers) {
         body.append("musicxml", currentMusicXml);
         body.append("answers", JSON.stringify(answers));
 
-        const result = await post("api/refine", body);
+        const result = readsHere
+            ? await ownKey.refine({
+                  file: sourceFile,
+                  instrument: ui.instrument.value,
+                  musicxml: currentMusicXml,
+                  answers,
+                  onProgress: stopClock.progress,
+              })
+            : await post("api/refine", body);
         await showScore(result.musicxml, result.title);
         ui.pieceName.textContent = `${result.title} — corrected`;
         offerDownload(result.title);
@@ -637,17 +716,25 @@ async function sendAnswers(answers) {
 function showElapsed(message) {
     reading = true;
     const started = Date.now();
+    let detail = "usually one to four minutes";
     const tick = () => {
         const seconds = Math.floor((Date.now() - started) / 1000);
         const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-        setStatus(`${message}… ${clock} — usually one to three minutes`, "busy");
+        setStatus(`${message}… ${clock} — ${detail}`, "busy");
     };
     tick();
     const timer = setInterval(tick, 1000);
-    return () => {
+    const stop = () => {
         clearInterval(timer);
         reading = false;
     };
+    // What the reader says it is working on, in place of the estimate - only
+    // a read in the page hears this, as the model's thinking streams in.
+    stop.progress = (heading) => {
+        detail = heading;
+        tick();
+    };
+    return stop;
 }
 
 function setUploadsEnabled(enabled) {

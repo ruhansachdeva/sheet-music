@@ -46,43 +46,60 @@ const timing = readFileSync(join(ROOT, "samples/timing-test.musicxml"), "utf8");
 const asked = [];
 // What the stand-in does: read normally, or fail the way Gemini can.
 let behaviour = "read";
+
 const reader = createServer(async (request, response) => {
+    // The page on the hosted site calls Gemini straight from the browser, so
+    // the stand-in answers cross-origin requests as Gemini does.
+    const cors = {
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "content-type, x-goog-api-key",
+        "access-control-allow-methods": "GET, POST, DELETE",
+    };
+    const reply = (status, body, extra = {}) => {
+        response.writeHead(status, { "content-type": "application/json", ...cors, ...extra });
+        response.end(JSON.stringify(body));
+    };
+    if (request.method === "OPTIONS") return reply(204, {});
+
     let body = "";
     for await (const chunk of request) body += chunk;
+    // A key is checked by listing models with it; "not-a-key" is turned away.
+    const key = request.headers["x-goog-api-key"];
+    if (key === "not-a-key") return reply(400, { error: { message: "API key not valid. Please pass a valid API key." } });
+    if (request.url.startsWith("/models")) return reply(200, { models: [{ name: "models/gemini-flash-latest" }] });
     if (behaviour === "daily limit") {
-        response.writeHead(429, { "content-type": "application/json", "retry-after": "46755" });
-        response.end(JSON.stringify({ error: { message: "Rate limit exceeded (limit: 20 requests per day on Free Tier)." } }));
-        return;
+        return reply(429, { error: { message: "Rate limit exceeded (limit: 20 requests per day on Free Tier)." } },
+            { "retry-after": "46755" });
     }
-    if (behaviour === "not music") {
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ status: "completed", steps: [{ type: "model_output", content: [{ type: "text",
-            text: JSON.stringify({ title: "A cat", musicxml: "This photo shows a cat, not sheet music.", questions: [] }) }] }] }));
-        return;
-    }
-    const { input = [] } = JSON.parse(body || "{}");
+    const { input = [], stream } = JSON.parse(body || "{}");
     const text = input.find((item) => item.type === "text")?.text ?? "";
     const refining = text.includes("My answers:");
     asked.push({
         refining,
+        stream,
+        key,
         withImage: input.some((item) => item.type === "image"),
         answer: /My answer: (.*)/.exec(text)?.[1] ?? null,
     });
-    // Long enough that the page is seen mid-read.
+    const answer = behaviour === "not music"
+        ? { title: "A cat", musicxml: "This photo shows a cat, not sheet music.", questions: [] }
+        : refining
+          ? { title: "Twinkle", musicxml: timing, questions: [] }
+          : {
+                title: "Twinkle",
+                musicxml: twinkle,
+                questions: [{ id: "q1", measure: 2, question: "Is bar 2 a tie or a slur?", options: ["Tie", "Slur"] }],
+            };
+    // Streamed as Gemini streams it: a summary of the thinking straight away,
+    // then - 1.5s later, so the page is seen mid-read - the answer.
+    const event = (e) => `event: ${e.event_type}\ndata: ${JSON.stringify(e)}\n\n`;
+    response.writeHead(200, { "content-type": "text/event-stream", ...cors });
+    response.write(event({ event_type: "step.start", index: 0, step: { type: "thought" } }));
+    response.write(event({ event_type: "step.delta", index: 0, delta: { type: "thought_summary", content: { text: "**Reading the Staff**\n\nTreble clef." } } }));
     await sleep(1500);
-    const reply = refining
-        ? { title: "Twinkle", musicxml: timing, questions: [] }
-        : {
-              title: "Twinkle",
-              musicxml: twinkle,
-              questions: [{ id: "q1", measure: 2, question: "Is bar 2 a tie or a slur?", options: ["Tie", "Slur"] }],
-          };
-    response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify({
-        status: "completed",
-        model: "stand-in",
-        steps: [{ type: "model_output", content: [{ type: "text", text: JSON.stringify(reply) }] }],
-    }));
+    response.write(event({ event_type: "step.start", index: 1, step: { type: "model_output" } }));
+    response.write(event({ event_type: "step.delta", index: 1, delta: { type: "text", text: JSON.stringify(answer) } }));
+    response.end(event({ event_type: "interaction.completed", interaction: { model: "stand-in", status: "completed" } }));
 });
 reader.listen(0);
 await once(reader, "listening");
@@ -183,7 +200,7 @@ try {
         };
     `);
     check("while reading, the status line is only the clock", during.statuses,
-        ["Reading your sheet music with Gemini… m:ss — usually one to three minutes"]);
+        ["Reading your sheet music with Gemini… m:ss — usually one to four minutes"]);
     check("and the upload buttons are locked", during.locked, [true, true]);
 
     await sleep(2500);
@@ -221,6 +238,7 @@ try {
     check("and the question is done with", answered.questionsGone, true);
 
     check("the reader got the photo both times", asked.map((a) => a.withImage), [true, true]);
+    check("streamed, so the connection never goes quiet", asked.map((a) => a.stream), [true, true]);
     check("and the answer chosen", asked.map((a) => a.answer), [null, "Tie"]);
 
     // When a read fails, the page says why, unlocks, and keeps what it had.
@@ -256,6 +274,128 @@ try {
     check("a photo that is not music is said to be so", /not.*sheet music/i.test(notMusic.said), true);
     check("and unlocks the uploads", notMusic.unlocked, true);
     behaviour = "read";
+    // --- the hosted copy, reading with your own key -----------------------
+    // The static build, as GitHub Pages serves it: no server, an api/health
+    // file saying so, and the page calling the reader itself.
+    console.log("\non the hosted copy, with your own key");
+    const site = createServer((request, response) => {
+        const path = decodeURIComponent(new URL(request.url, "http://x").pathname);
+        if (path === "/api/health") {
+            response.writeHead(200, { "content-type": "application/json" });
+            return response.end('{"ok":true,"canRead":false,"provider":null,"static":true}');
+        }
+        const file = path.startsWith("/samples/")
+            ? join(ROOT, path)
+            : join(ROOT, "public", path === "/" ? "index.html" : path);
+        try {
+            const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".musicxml": "application/xml" };
+            response.writeHead(200, { "content-type": types[/\.\w+$/.exec(file)?.[0]] ?? "application/octet-stream" });
+            response.end(readFileSync(file));
+        } catch {
+            response.writeHead(404);
+            response.end();
+        }
+    });
+    site.listen(0);
+    await once(site, "listening");
+    const hosted = `http://localhost:${site.address().port}/`;
+    const asksBefore = asked.length;
+    behaviour = "read";
+
+    // Point the page's reader at the stand-in, as a proxy would be.
+    await send("Page.navigate", { url: hosted });
+    await sleep(500);
+    await evaluate(`
+        localStorage.setItem("gemini-api-base", "http://localhost:${reader.address().port}");
+    `);
+    await send("Page.navigate", { url: hosted });
+    for (let i = 0; i < 100; i++) {
+        try { if (await evaluate("return Boolean(window.sheetMusic)")) break; } catch {}
+        await sleep(150);
+    }
+    await sleep(500);
+
+    const offered = await evaluate(`
+        return {
+            note: !document.getElementById("no-reader").hidden,
+            form: Boolean(document.getElementById("key-form")),
+            photosOffered: document.getElementById("file").accept.includes("image"),
+        };
+    `);
+    check("the hosted copy offers to read with your own key", [offered.note, offered.form], [true, true]);
+    check("and until then does not offer photos", offered.photosOffered, false);
+
+    const saveKey = (key) => evaluate(`
+        document.getElementById("key-input").value = ${JSON.stringify(key)};
+        document.getElementById("key-form").requestSubmit();
+        await new Promise((r) => setTimeout(r, 800));
+        return {
+            error: document.getElementById("key-error").hidden ? null : document.getElementById("key-error").textContent,
+            note: !document.getElementById("no-reader").hidden,
+            saved: !document.getElementById("own-key").hidden,
+            stored: localStorage.getItem("gemini-key"),
+        };
+    `);
+    const rejected = await saveKey("not-a-key");
+    check("a key Google turns down is not saved", [rejected.stored, rejected.saved], [null, false]);
+    check("and the page says so", /did not accept that key/.test(rejected.error ?? ""), true);
+    const accepted = await saveKey("my-own-key");
+    check("a good key is saved in the browser", accepted.stored, "my-own-key");
+    check("and the page is ready to read", [accepted.note, accepted.saved], [false, true]);
+
+    const hostedRead = await evaluate(`
+        const canvas = document.createElement("canvas");
+        canvas.width = 300;
+        canvas.height = 150;
+        const png = await new Promise((r) => canvas.toBlob(r, "image/png"));
+        const input = document.getElementById("file");
+        const files = new DataTransfer();
+        files.items.add(new File([png], "page.png", { type: "image/png" }));
+        input.files = files.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        const piece = document.getElementById("piece-name");
+        // Part-way through, the status line says what the model is thinking about.
+        await new Promise((r) => setTimeout(r, 700));
+        const midway = document.getElementById("status").textContent;
+        for (let i = 0; i < 60 && !/read by/.test(piece.textContent); i++) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        const questions = document.getElementById("questions");
+        const out = { piece: piece.textContent, asked: !questions.hidden, midway };
+        questions.querySelector(".choice").click();
+        questions.querySelector(".questions-actions .primary").click();
+        for (let i = 0; i < 60 && !/corrected/.test(piece.textContent); i++) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        out.corrected = piece.textContent;
+        out.bpm = window.sheetMusic.timeline.bpm;
+        return out;
+    `);
+    const fromPage = asked.slice(asksBefore);
+    check("while it reads, the page shows what the model is thinking about", /— Reading the Staff$/.test(hostedRead.midway), true);
+    check("a photo is read in the page", hostedRead.piece, "Twinkle — read by Gemini");
+    check("with the reader's question", hostedRead.asked, true);
+    check("and the answer applied", [hostedRead.corrected, hostedRead.bpm], ["Twinkle — corrected", 96]);
+    check("the page sent the photo, with your key, streamed",
+        fromPage.map((a) => [a.withImage, a.key, a.stream]), [[true, "my-own-key", true], [true, "my-own-key", true]]);
+
+    // The key is remembered on the next visit, and can be forgotten.
+    await send("Page.navigate", { url: hosted });
+    for (let i = 0; i < 100; i++) {
+        try { if (await evaluate("return Boolean(window.sheetMusic)")) break; } catch {}
+        await sleep(150);
+    }
+    await sleep(500);
+    const remembered = await evaluate(`
+        const out = { saved: !document.getElementById("own-key").hidden };
+        document.getElementById("forget-key").click();
+        out.forgotten = localStorage.getItem("gemini-key") === null && !document.getElementById("no-reader").hidden;
+        return out;
+    `);
+    check("the key is remembered on the next visit", remembered.saved, true);
+    check("and Forget it removes it", remembered.forgotten, true);
+    site.close();
+
     // The two failed reads log their reason, as intended; nothing else may.
     check("no other errors in the page",
         errors.filter((e) => !/used up|not return a MusicXML|not.*sheet music/i.test(e)), []);

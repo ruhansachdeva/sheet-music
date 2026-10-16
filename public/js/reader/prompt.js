@@ -1,5 +1,7 @@
 // What we ask the model for, and the shape we expect back. Nothing here is
-// specific to a provider: both lib/providers/*.js send this same prompt.
+// specific to a provider, or to where the reading runs: the server's
+// providers and the page itself (reading with your own key) send this same
+// prompt.
 
 /**
  * The response shape, as a strict JSON schema. The same shape comes back from
