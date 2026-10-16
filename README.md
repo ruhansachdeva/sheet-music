@@ -27,8 +27,11 @@ a metronome, and the current note lit up on the score.
   tuplets, rests, repeats, and several voices or staves at once.
 - **Metronome**: separate count-in and during-playback toggles, accented on
   beat 1, clicking on the time signature's beat.
-- **Controls**: play/pause (or the space bar), stop, a tempo slider that starts
-  at the score's own tempo, a size slider, and the bar you are currently on.
+- **Controls**: play/pause (or the space bar), stop, a seek bar with the time
+  played and the length of the piece - slide it anywhere, and the highlighted
+  notes follow - a tempo slider that starts at the score's own tempo, a size
+  slider, and the bar you are currently on. The score scrolls to keep the
+  highlighted notes in view.
 
 ## Run it
 
