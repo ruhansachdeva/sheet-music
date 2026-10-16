@@ -1732,6 +1732,13 @@ async function run() {
         // Where each note and rest is drawn right now. The score re-engraves
         // when the writer opens or closes, so this is asked afresh every time.
         const drawn = () => page.evaluate(`
+            // Moving the position can set off a smooth scroll to show it:
+            // measure only once the page has come to rest.
+            let last = -1;
+            for (let i = 0; i < 40 && scrollY !== last; i++) {
+                last = scrollY;
+                await new Promise((r) => setTimeout(r, 100));
+            }
             const out = [];
             const sheet = window.sheetMusic.score.osmd.GraphicSheet;
             for (const staves of sheet.MeasureList) for (const measure of staves)
