@@ -2025,6 +2025,29 @@ async function run() {
                 player.stop();
                 return out;
             `);
+            // Tapping a note while it plays pauses there.
+            const tappedWhilePlaying = await page.evaluate(`
+                const { player } = window.sheetMusic;
+                await player.play();
+                await new Promise((r) => setTimeout(r, 400));
+                const sheet = window.sheetMusic.score.osmd.GraphicSheet;
+                let target = null;
+                for (const staves of sheet.MeasureList) for (const measure of staves)
+                    for (const entry of measure.staffEntries) for (const voice of entry.graphicalVoiceEntries)
+                        for (const note of voice.notes) {
+                            if (!target && Math.abs(note.sourceNote.getAbsoluteTimestamp().RealValue - 1) < 1e-6) {
+                                target = note.getSVGGElement().getBoundingClientRect();
+                            }
+                        }
+                document.getElementById("score").dispatchEvent(new MouseEvent("click", {
+                    bubbles: true, clientX: target.left + target.width / 2, clientY: target.top + target.height / 2,
+                }));
+                await new Promise((r) => setTimeout(r, 300));
+                const out = { state: player.state, at: player.position() };
+                player.stop();
+                return out;
+            `);
+            check("tapping a note while it plays pauses there", [tappedWhilePlaying.state, tappedWhilePlaying.at], ["paused", 2.5]);
             check("seeking while playing carries on from there", seekingWhilePlaying.state, "playing");
             check("at the new point", seekingWhilePlaying.at > 15 && seekingWhilePlaying.at < 16.5, true);
             check("grabbing the seek bar pauses", seekingWhilePlaying.grabbed, "paused");
