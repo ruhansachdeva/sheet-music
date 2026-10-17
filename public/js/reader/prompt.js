@@ -53,6 +53,27 @@ export const RESPONSE_SCHEMA = {
     additionalProperties: false,
 };
 
+/**
+ * The shape of an answer that carries on with a score where the last one ran
+ * out of room: the rest of the document, and the same instrument and
+ * questions, now that the whole page has been read.
+ */
+export const CONTINUATION_SCHEMA = {
+    type: "object",
+    properties: {
+        rest: {
+            type: "string",
+            description:
+                "The rest of the MusicXML document: everything after the last </measure> of the score " +
+                "so far, through the closing </score-partwise>.",
+        },
+        instrument: RESPONSE_SCHEMA.properties.instrument,
+        questions: RESPONSE_SCHEMA.properties.questions,
+    },
+    required: ["rest", "instrument", "questions"],
+    additionalProperties: false,
+};
+
 export const SYSTEM_PROMPT = `You read photographs and PDFs of sheet music and turn them into MusicXML.
 
 Output a complete, valid MusicXML 3.1 \`score-partwise\` document:
@@ -95,6 +116,28 @@ export function userPromptForTranscribe(instrument) {
 The player will play it back as: ${instrument}. Use that to read the score - it tells you which clef and range to expect, and whether two staves belong to one player (piano) or one staff is the whole part.
 
 Transcribe every measure of every staff you can see. Write the notes at written pitch, as printed.`;
+}
+
+/**
+ * Carrying on with an answer that ran out of room. `task` is what was asked;
+ * `sofar` is the score up to its last finished measure; `where` is from
+ * read.js's lastMeasure.
+ */
+export function userPromptForContinuing(task, sofar, where) {
+    const place = where.parts > 1 ? `measure ${where.number} of part ${where.part} of ${where.parts}` : `measure ${where.number}`;
+    const after = where.parts > where.part
+        ? "the measures after it, then </part> and the parts still to come"
+        : "the measures after it, then </part>";
+
+    return `${task}
+
+You have started this answer already, but it ran out of room part-way through the MusicXML. Here is the score as far as it got. It stops after ${place}:
+
+${sofar}
+
+Carry on from exactly where it stops. In \`rest\`, write only what comes after that last </measure>: ${after}, through </score-partwise>. Do not repeat anything already written. Keep to the same divisions, instrument ids, voices and compact style. If that part is already finished, \`rest\` starts with </part>.
+
+Give \`instrument\` and \`questions\` for the whole page, as you would have at the end of the first answer.`;
 }
 
 export function userPromptForRefine(instrument, musicxml, answers) {
