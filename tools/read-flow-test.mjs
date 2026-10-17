@@ -499,6 +499,7 @@ try {
     await longRead();
     check("a bar the recheck cannot fix is pointed out",
         /Bar 2 does not add up to the time signature/.test(await status()), true);
+    check("and shaded on the score", await evaluate(`return document.querySelectorAll("#score .bar-mark").length`), 1);
     behaviour = "read";
     // --- the hosted copy, reading with your own key -----------------------
     // The static build, as GitHub Pages serves it: no server, an api/health

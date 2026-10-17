@@ -1666,6 +1666,29 @@ async function run() {
             pdf.strips > 2 && pdf.stripNames[0] === "systems-page-1-1.png" && pdf.stripNames.at(-1).startsWith("systems-page-2"), true);
         check("a PDF that will not open is sent as it is", pdf.broken, 0);
 
+        // --- bars a reading got wrong are shaded ----------------------------
+        console.log("\nshading bars that need checking");
+        await loadSample(page, "timing-test.musicxml");
+        const marks = await page.evaluate(`
+            const { score } = window.sheetMusic;
+            const count = () => document.querySelectorAll("#score .bar-mark").length;
+            score.markBars([2, 5]);
+            const marked = count();
+            const box = document.querySelector("#score .bar-mark").getBBox();
+            score.setZoom(0.8);
+            const afterZoom = count();
+            score.fitAgain();
+            const afterFit = count();
+            score.markBars([]);
+            const cleared = count();
+            score.markBars([3]);
+            await window.sheetMusic.loadSample("twinkle.musicxml");
+            return { marked, sized: box.width > 50 && box.height > 30, afterZoom, afterFit, cleared, nextScore: count() };
+        `);
+        check("the bars named are shaded", [marks.marked, marks.sized], [2, true]);
+        check("and stay shaded through a zoom and a re-fit", [marks.afterZoom, marks.afterFit], [2, 2]);
+        check("until cleared, or another score loads", [marks.cleared, marks.nextScore], [0, 0]);
+
         // --- the screen stays on through a reading -------------------------
         console.log("\nkeeping the screen on");
         const wake = await page.evaluate(`
