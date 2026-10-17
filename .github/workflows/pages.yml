@@ -46,6 +46,9 @@ jobs:
       - name: Check how a reading is put together and put right
         run: npm run test:reader
 
+      - name: Check the server's routes accept and refuse the right requests
+        run: npm run test:api
+
       - name: Assemble the site
         run: |
           mkdir -p site
