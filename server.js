@@ -57,8 +57,7 @@ app.post("/api/transcribe", upload.single("file"), async (req, res, next) => {
 
         const result = await transcribe({ file: req.file, instrument });
         logUsage("transcribe", req.file, result);
-        res.json({ title: result.title, musicxml: result.musicxml, questions: result.questions,
-            instrument: result.instrument, model: result.model, fallback: result.fallback });
+        res.json(reading(result));
     } catch (err) {
         next(err);
     }
@@ -89,12 +88,17 @@ app.post("/api/refine", upload.single("file"), async (req, res, next) => {
             answers,
         });
         logUsage("refine", req.file, result);
-        res.json({ title: result.title, musicxml: result.musicxml, questions: result.questions,
-            instrument: result.instrument, model: result.model, fallback: result.fallback });
+        res.json(reading(result));
     } catch (err) {
         next(err);
     }
 });
+
+/** What the page is sent of a reading. */
+function reading(result) {
+    const { title, musicxml, questions, instrument, model, fallback, uneven } = result;
+    return { title, musicxml, questions, instrument, model, fallback, uneven };
+}
 
 function logUsage(route, file, result) {
     const { input, output } = result.usage ?? {};
