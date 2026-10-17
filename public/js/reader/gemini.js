@@ -151,6 +151,21 @@ async function read(body, config) {
         if (!response.ok) return { response };
 
         const interaction = await follow(response, config);
+
+        // The stream was cut before the end - a browser's is, at about five
+        // minutes, and a dense page takes longer than that. What was written
+        // is kept, as if the answer had run out of room, and the reading
+        // carries on from it; cut before writing anything, it starts over.
+        if (interaction.status === "cut") {
+            if (interaction.steps[0].content[0].text) return { interaction: { ...interaction, status: "incomplete" } };
+            if (dropped >= OVERLOADED_RETRIES) {
+                throw new ReadError("The connection to Gemini kept dropping before the reading was finished. Try again.", 502);
+            }
+            config.log(`gemini: the stream was cut (${interaction.why}) before any answer, starting again`);
+            config.onProgress("The connection dropped - starting again");
+            continue;
+        }
+
         // A read can also be given up part-way, as overloaded - minutes in,
         // on a long page. That is the busy case again: it is worth starting
         // over, a few times, each start with its own patience.
@@ -278,19 +293,19 @@ async function follow(response, config) {
         }
     } catch (error) {
         if (error instanceof ReadError) throw error;
-        throw new ReadError(
-            `The connection to Gemini dropped part-way through the reading (${error?.message ?? "network error"}). Try again.`,
-            502,
-        );
+        // Dropped part-way: what arrived is still worth having.
+        return cut(error?.message ?? "network error");
     }
 
-    if (!finished) {
-        throw new ReadError("The connection to Gemini closed before the reading was finished. Try again.", 502);
-    }
+    if (!finished) return cut("closed early");
     return {
         ...finished,
         steps: [{ type: "model_output", content: [{ type: "text", text }] }],
     };
+
+    function cut(why) {
+        return { status: "cut", why, steps: [{ type: "model_output", content: [{ type: "text", text }] }] };
+    }
 }
 
 /** A request to the API, with the key, and network failures explained. */
