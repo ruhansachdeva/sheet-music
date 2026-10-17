@@ -3,6 +3,7 @@ import multer from "multer";
 import {
     transcribe,
     refine,
+    reread,
     TranscribeError,
     currentProvider,
     requireProvider,
@@ -99,6 +100,31 @@ app.post("/api/refine", page, async (req, res, next) => {
         });
         logUsage("refine", file, result);
         res.json(reading(result));
+    } catch (err) {
+        next(err);
+    }
+});
+
+/** The same file, the MusicXML so far, and bars said to be wrong: those bars read again. */
+app.post("/api/reread", page, async (req, res, next) => {
+    try {
+        const { file, strips } = uploaded(req);
+        if (!req.body.musicxml) throw new TranscribeError("No musicxml to correct.", 400);
+        const instrument = readInstrument(req.body);
+
+        let bars;
+        try {
+            bars = JSON.parse(req.body.bars || "[]");
+        } catch {
+            throw new TranscribeError("bars was not valid JSON.", 400);
+        }
+        if (!Array.isArray(bars) || bars.length === 0) throw new TranscribeError("No bars to read again.", 400);
+        requireProvider();
+
+        const result = await reread({ file, strips, instrument, musicxml: req.body.musicxml, bars });
+        console.log(`reread: bars ${bars.join(", ")} of ${file.originalname} -> changed ${result.changed.join(", ") || "none"}`);
+        const { musicxml, changed, uneven, model, fallback } = result;
+        res.json({ musicxml, changed, uneven, model, fallback });
     } catch (err) {
         next(err);
     }
