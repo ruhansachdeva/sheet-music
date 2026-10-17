@@ -24,6 +24,7 @@ const ui = {
     addPage: document.getElementById("add-page"),
     clearPages: document.getElementById("clear-pages"),
     rereadBar: document.getElementById("reread-bar"),
+    rereadShaded: document.getElementById("reread-shaded"),
     instrument: document.getElementById("instrument"),
     status: document.getElementById("status"),
     controls: document.getElementById("controls"),
@@ -215,6 +216,7 @@ let sourceFile = null;
 function forgetSource() {
     sourceFile = null;
     ui.rereadBar.hidden = true;
+    ui.rereadShaded.hidden = true;
 }
 
 // The bar the player is on, for "Re-read bar N".
@@ -848,12 +850,12 @@ async function transcribe(originals) {
         setUploadsEnabled(true);
     }
     await showScore(result.musicxml, result.title, { instrument: result.instrument });
-    score.markBars(result.uneven);
     sourceFile = file;
     sourceStrips = strips;
     currentBar = 1;
     ui.rereadBar.textContent = "Re-read bar 1";
     ui.rereadBar.hidden = false;
+    shade(result.uneven);
     ui.pieceName.textContent = result.title
         ? `${result.title} — read by ${readerName}`
         : `Read by ${readerName}`;
@@ -899,19 +901,38 @@ function warnAboutReading(result) {
     if (warnings.length) setStatus(warnings.join(" "), "info");
 }
 
+/** Bars of a reading still wrong: shaded on the score, and offered to re-read. */
+let shadedBars = [];
+
+function shade(bars) {
+    shadedBars = (bars ?? []).map(Number).filter(Number.isFinite);
+    score.markBars(shadedBars);
+    const count = shadedBars.length;
+    ui.rereadShaded.textContent = `Re-read ${count === 1 ? "the shaded bar" : `${count} shaded bars`}`;
+    ui.rereadShaded.hidden = !(sourceFile && count);
+}
+
+/** "bar 5", "bars 5 and 6", "bars 5, 6 and 9". */
+function barsText(bars) {
+    if (bars.length === 1) return `bar ${bars[0]}`;
+    return `bars ${bars.slice(0, -1).join(", ")} and ${bars.at(-1)}`;
+}
+
 /**
- * Reads the bar the player is on again - tap a wrong note to go to its bar.
- * A bar can add up and still be wrong, which only listening catches; this
- * looks again at just that bar, in one request, and keeps the rest.
+ * Reads bars again - the one the player is on (tap a wrong note to go to its
+ * bar), or every shaded one. A bar can add up and still be wrong, which only
+ * listening catches; this looks again at just those bars, in one request,
+ * and keeps the rest.
  */
-async function rereadBar() {
-    if (!sourceFile || !currentMusicXml) return;
-    const bar = currentBar;
+async function rereadBars(bars) {
+    if (!sourceFile || !currentMusicXml || !bars.length) return;
+    const which = barsText(bars);
     player.pause();
     const name = ui.pieceName.textContent;
     setUploadsEnabled(false);
     ui.rereadBar.disabled = true;
-    const stopClock = showElapsed(`${readerName} is reading bar ${bar} again`, "usually a minute or two");
+    ui.rereadShaded.disabled = true;
+    const stopClock = showElapsed(`${readerName} is reading ${which} again`, "usually a minute or two");
     let result;
     try {
         const body = new FormData();
@@ -919,41 +940,45 @@ async function rereadBar() {
         for (const strip of sourceStrips) body.append("strips", strip);
         body.append("instrument", ui.instrument.value);
         body.append("musicxml", currentMusicXml);
-        body.append("bars", JSON.stringify([bar]));
+        body.append("bars", JSON.stringify(bars));
         result = readsHere
             ? await ownKey.reread({
                   file: sourceFile,
                   strips: sourceStrips,
                   instrument: ui.instrument.value,
                   musicxml: currentMusicXml,
-                  bars: [bar],
+                  bars,
                   onProgress: stopClock.progress,
               })
             : await post("api/reread", body);
     } catch (error) {
-        setStatus(`Could not read bar ${bar} again: ${error.message}`, "error");
+        setStatus(`Could not read ${which} again: ${error.message}`, "error");
         return;
     } finally {
         stopClock();
         setUploadsEnabled(true);
         ui.rereadBar.disabled = false;
+        ui.rereadShaded.disabled = false;
     }
 
     if (!result.changed.length) {
-        setStatus(`${readerName} read bar ${bar} the same way again. If it is still wrong, Edit notes can fix it by hand.`, "info");
+        setStatus(`${readerName} read ${which} the same way again. If it is still wrong, Edit notes can fix it by hand.`, "info");
         return;
     }
     await showScore(result.musicxml, name, { ask: false });
     ui.pieceName.textContent = name;
     offerDownload(name.replace(/ — .*$/, ""));
-    score.markBars(result.uneven);
-    // Back to the bar that changed, so it can be heard straight away.
-    const step = timeline.steps.find((s) => s.measure === bar);
+    shade(result.uneven);
+    // Back to the first bar that changed, so it can be heard straight away.
+    const first = Math.min(...result.changed.map(Number));
+    const step = timeline.steps.find((s) => s.measure === first);
     if (step) player.seek(step.time);
-    setStatus(`Bar ${bar} read again and corrected. Press play to hear it.`, "info");
+    const fixed = barsText(result.changed.map(Number).sort((a, b) => a - b));
+    setStatus(`${fixed[0].toUpperCase()}${fixed.slice(1)} read again and corrected. Press play to hear ${result.changed.length === 1 ? "it" : "them"}.`, "info");
 }
 
-ui.rereadBar.addEventListener("click", rereadBar);
+ui.rereadBar.addEventListener("click", () => rereadBars([currentBar]));
+ui.rereadShaded.addEventListener("click", () => rereadBars(shadedBars));
 
 /** Sends my answers back, so the reader can correct the MusicXML. */
 async function sendAnswers(answers) {
@@ -980,7 +1005,7 @@ async function sendAnswers(answers) {
               })
             : await post("api/refine", body);
         await showScore(result.musicxml, result.title, { ask: false });
-        score.markBars(result.uneven);
+        shade(result.uneven);
         ui.pieceName.textContent = `${result.title} — corrected`;
         offerDownload(result.title);
         questionPanel.show(result.questions);
