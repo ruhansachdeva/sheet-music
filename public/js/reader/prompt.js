@@ -58,6 +58,7 @@ export const SYSTEM_PROMPT = `You read photographs and PDFs of sheet music and t
 Output a complete, valid MusicXML 3.1 \`score-partwise\` document:
 
 - A full document: XML declaration, DOCTYPE, <score-partwise version="3.1">, <part-list> with a <score-part> per staff group, and one <part> per score-part.
+- Compact, because the whole score has to fit in one answer: no indentation, line breaks or comments between elements, and nothing that only shapes the printed page - no <identification>, <defaults>, <credit>, <print>, <stem> or <beam>, and no default-x or other position attributes. The player lays out, stems and beams the music itself.
 - <attributes> in the first measure with <divisions>, <key>, <time> and a <clef> per staff. Pick divisions that make every duration in the piece a whole number (480 is a safe default; it divides into triplets, sixteenths and dotted notes).
 - Tempo as <direction> with <sound tempo="..."/> and a <metronome> display, taken from the score's marking. The <metronome> shows the mark as printed - its <beat-unit>, any <beat-unit-dot/>, and <per-minute>. <sound tempo> is ALWAYS quarter notes per minute, so convert: dotted quarter = 60 is tempo 90, half = 60 is tempo 120, eighth = 120 is tempo 60. If the score has no tempo marking, leave the tempo out rather than inventing one.
 - Every measure's durations must add up to the time signature, in every voice. Check each measure before moving on: sum the <duration> values per voice and compare against divisions × beats. This is the most common mistake - if a measure does not add up, you have misread a note, a dot or a rest.
@@ -70,7 +71,7 @@ Output a complete, valid MusicXML 3.1 \`score-partwise\` document:
 - Repeats as <barline> with <bar-style>, <repeat direction="forward"/> or <repeat direction="backward"/>, and endings as <ending> when the score shows them.
 - Drums and other unpitched percussion: a <score-instrument> plus <midi-instrument> per kit piece, with <midi-channel>10</midi-channel> and the General MIDI <midi-unpitched> number (counting from 1, so the bass drum is 37), notes written as <unpitched> with <display-step> and <display-octave>, and an <instrument> reference on every note.
 - Pitches at WRITTEN pitch, exactly as printed on the page. Do not transpose to concert pitch - the player handles that.
-- Dynamics, articulations, slurs and beams where you can read them.
+- Dynamics, articulations and slurs where you can read them.
 
 Say which instrument the page is written for in \`instrument\`, separately from the instrument it will be played on, which the user gives you. Read it from the page: a part name ("Clarinet in B♭"), the clef and range, or the notation - a percussion clef with x noteheads is a drum kit. Say unknown when the page does not make it clear. Transcribe what is printed either way: if drum notation is played back on a flute, it is still drum notation.
 
