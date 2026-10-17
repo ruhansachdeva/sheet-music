@@ -1893,6 +1893,14 @@ async function run() {
         // Where each note and rest is drawn right now. The score re-engraves
         // when the writer opens or closes, so this is asked afresh every time.
         const drawn = () => page.evaluate(`
+            // Sizes are noticed (ResizeObserver) only when a frame is drawn -
+            // the docked writer's height among them, which is what lets the
+            // score scroll clear of it - so let one be drawn first. Not
+            // forever: a tab in the background gets none.
+            await Promise.race([
+                new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+                new Promise((r) => setTimeout(r, 1000)),
+            ]);
             // Moving the position can set off a smooth scroll to show it:
             // measure only once the page has come to rest.
             let last = -1;
