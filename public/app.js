@@ -838,6 +838,7 @@ async function transcribe(originals) {
         setUploadsEnabled(true);
     }
     await showScore(result.musicxml, result.title, { instrument: result.instrument });
+    score.markBars(result.uneven);
     sourceFile = file;
     sourceStrips = strips;
     ui.pieceName.textContent = result.title
@@ -870,7 +871,8 @@ function warnAboutReading(result) {
         const list = bars.length > 6 ? `${bars.slice(0, 5).join(", ")} and ${bars.length - 5} more` : bars.join(", ");
         warnings.push(
             `${one ? "Bar" : "Bars"} ${list} ${one ? "does" : "do"} not add up to the time signature, ` +
-                `so ${one ? "its" : "their"} rhythm is off. Check ${one ? "it" : "them"} against the page.`,
+                `so ${one ? "its" : "their"} rhythm is off - ${one ? "it is" : "they are"} shaded on the score. ` +
+                `Check ${one ? "it" : "them"} against the page.`,
         );
     }
     const gone = result.missing ?? [];
@@ -909,6 +911,7 @@ async function sendAnswers(answers) {
               })
             : await post("api/refine", body);
         await showScore(result.musicxml, result.title, { ask: false });
+        score.markBars(result.uneven);
         ui.pieceName.textContent = `${result.title} — corrected`;
         offerDownload(result.title);
         questionPanel.show(result.questions);
