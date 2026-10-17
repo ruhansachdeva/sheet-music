@@ -61,6 +61,7 @@ const opening = /<attributes>[\s\S]*?<\/attributes>/.exec(barOf(1))[0];
 const skipping = twinkle.replace(barOf(1), "").replace(barOf(2), "")
     .replace(/(<measure number="3"[^>]*>)/, `$1${opening}`);
 let filled = [];
+let rereadAsked = [];
 
 const reader = createServer(async (request, response) => {
     // The page on the hosted site calls Gemini straight from the browser, so
@@ -102,6 +103,15 @@ const reader = createServer(async (request, response) => {
               ? [cut({ rest: twinkle.slice(at(1), at(3) + 30) }), behaviour === "cut" ? "cut" : "incomplete"]
               : [JSON.stringify({ rest: twinkle.slice(at(3)), instrument: "piano", questions: [] }), "completed"];
         return streamed(output, status);
+    }
+    // Re-reading a bar: bar 1 comes back with its first note a step lower,
+    // or - "reread same" - exactly as it was.
+    if (text.includes("read wrong.")) {
+        rereadAsked.push(/found measure (\d+) read wrong/.exec(text)?.[1]);
+        // The bar as it is in the score sent - so "the same" is the same.
+        const current = /<measure number="1"[\s\S]*?<\/measure>/.exec(text.slice(text.indexOf("The current MusicXML")))[0];
+        const answer = behaviour === "reread same" ? current : current.replace("<step>G</step>", "<step>F</step>");
+        return streamed(JSON.stringify({ measures: [{ part: "P1", number: "1", musicxml: answer }] }));
     }
     if (behaviour === "skipping") {
         if (!text.includes("It skips some measures")) {
@@ -477,6 +487,34 @@ try {
     const long = await longRead();
     check("it is read over several answers", carriedOn, [null, "1", "2"]);
     check("and comes out whole", [long.piece, long.notes], ["Twinkle — read by Gemini", 35]);
+
+    console.log("\nreading a bar again");
+    const rereadNow = () => evaluate(`
+        const button = document.getElementById("reread-bar");
+        const offered = !button.hidden && button.textContent;
+        const status = document.getElementById("status");
+        button.click();
+        for (let i = 0; i < 50 && !button.disabled; i++) await new Promise((r) => setTimeout(r, 20));
+        for (let i = 0; i < 200 && button.disabled; i++) await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 300));
+        const count = (midi) => window.sheetMusic.timeline.notes.filter((n) => n.midi === midi).length;
+        return { offered, said: status.textContent, g5: count(79), f5: count(77) };
+    `);
+    const beforeReread = await evaluate(`
+        const count = (midi) => window.sheetMusic.timeline.notes.filter((n) => n.midi === midi).length;
+        return { g5: count(79), f5: count(77) };
+    `);
+    behaviour = "reread";
+    rereadAsked = [];
+    const corrected = await rereadNow();
+    check("a reading offers to read its bar again", corrected.offered, "Re-read bar 1");
+    check("which asks about just that bar", rereadAsked, ["1"]);
+    check("and puts the corrected bar in", [corrected.said, corrected.g5 - beforeReread.g5, corrected.f5 - beforeReread.f5],
+        ["Bar 1 read again and corrected. Press play to hear it.", -1, 1]);
+    behaviour = "reread same";
+    const unchanged = await rereadNow();
+    check("a bar read the same way says so", /read bar 1 the same way again/.test(unchanged.said), true);
+    behaviour = "read";
 
     console.log("\nbars the reading skipped");
     behaviour = "skipping";
