@@ -197,6 +197,8 @@ async function startBrowser(url) {
             "--no-first-run",
             "--autoplay-policy=no-user-gesture-required",
             "--user-data-dir=" + join(process.env.TMPDIR ?? "/tmp", `sheet-music-test-${process.pid}`),
+            // Anything a machine needs, such as --no-sandbox on a CI runner.
+            ...(process.env.CHROME_FLAGS ?? "").split(" ").filter(Boolean),
             url,
         ],
         { stdio: ["ignore", "pipe", "pipe"] },
