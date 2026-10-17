@@ -20,7 +20,11 @@ a metronome, and the current note lit up on the score.
   several photos at once - each page of a piece - and they are read together
   into one score.
 - **Take a photo** on a phone: the camera button opens the rear camera, so you
-  can point it at a page and have it played back.
+  can point it at a page and have it played back. Photos wait in a tray, so a
+  piece can be photographed page by page and read as one score.
+- **Fix a bar**: a bar a reading still got wrong is shaded on the score, and
+  **Re-read bar N** reads the bar you are on again - tap a wrong note to go to
+  it - without reading the whole page.
 - **Write it yourself**: a note writer with a piano keyboard, note values, rests,
   dots and undo, which engraves and plays as you write.
 - **Instruments**: piano, violin, cello, flute, clarinet, trumpet, alto sax,
@@ -145,7 +149,8 @@ transposed.
 **Uploading** — use the file picker, or drop a file anywhere on the page. On a
 phone there is a **Take a photo** button as well, which opens the rear camera
 directly rather than the photo library. It only appears on devices that have a
-camera.
+camera. Each photo waits in a tray with a thumbnail: **Add a page** takes the
+next, **Read** reads them all, in the order taken, as one score.
 
 **On a laptop** — the writer takes the keyboard: A–G for notes, ↑ ↓ for the
 octave, 1 2 4 8 6 for whole to sixteenth (the fraction of a whole note), `.`
@@ -325,7 +330,10 @@ Interactions API. Then the reading is put together and checked, in
   total and need. A corrected bar goes in only if it now adds up without
   upsetting another.
 
-Anything still wrong is named on screen, so you know which bars to check.
+Anything still wrong is named on screen, and bars that still do not add up are
+shaded on the score. A bar can add up and still be wrong, which only listening
+catches: tap a note in it, and **Re-read bar N** sends just that bar back to be
+read again, in one request, and plays it from there.
 Questions are asked only when a reading is genuinely ambiguous and the answer
 changes the notes or the timing.
 
