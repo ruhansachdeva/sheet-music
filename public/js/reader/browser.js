@@ -70,23 +70,31 @@ export async function checkKey(apiKey) {
  * `onProgress` hears each heading of the model's thinking as it streams in.
  */
 function generateHere(onProgress) {
+    const encoded = new Map(); // each file is read once, however many answers it takes
+    const encode = (blob) => {
+        if (!encoded.has(blob)) {
+            encoded.set(blob, base64(blob).then((data) => ({ data, mimeType: mimeTypeOf(blob) })));
+        }
+        return encoded.get(blob);
+    };
     return async (request) => {
-        const file = { data: await base64(request.file), mimeType: mimeTypeOf(request.file) };
-        return generate({ ...request, file }, settings(savedKey(), onProgress));
+        const file = await encode(request.file);
+        const strips = request.strips?.length ? await Promise.all(request.strips.map(encode)) : undefined;
+        return generate({ ...request, file, strips }, settings(savedKey(), onProgress));
     };
 }
 
-export function transcribe({ file, instrument, onProgress }) {
+export function transcribe({ file, strips, instrument, onProgress }) {
     const progress = withPlace(onProgress);
     return read.transcribe(generateHere(progress), {
-        file, instrument, onContinue: progress.after, onRecheck: progress.recheck,
+        file, strips, instrument, onContinue: progress.after, onRecheck: progress.recheck,
     });
 }
 
-export function refine({ file, instrument, musicxml, answers, onProgress }) {
+export function refine({ file, strips, instrument, musicxml, answers, onProgress }) {
     const progress = withPlace(onProgress);
     return read.refine(generateHere(progress), {
-        file, instrument, musicxml, answers, onContinue: progress.after, onRecheck: progress.recheck,
+        file, strips, instrument, musicxml, answers, onContinue: progress.after, onRecheck: progress.recheck,
     });
 }
 

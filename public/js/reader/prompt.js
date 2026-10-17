@@ -196,6 +196,11 @@ The current MusicXML:
 ${musicxml}`;
 }
 
+/** Said alongside a page sent as strips, so they are read as one page. */
+export function aboutStrips(count) {
+    return `\n\nThe page comes as ${count} images, top to bottom: slices of one page, cut between systems so each can be seen in detail. Together they are the whole page, and the bars run on from one image to the next.`;
+}
+
 export function userPromptForRefine(instrument, musicxml, answers) {
     const answerLines = answers
         .map((a) => `- ${a.question}\n  My answer: ${a.answer}`)
