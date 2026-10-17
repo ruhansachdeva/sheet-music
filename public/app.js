@@ -17,6 +17,12 @@ const ui = {
     chooseFile: document.getElementById("choose-file"),
     takePhoto: document.getElementById("take-photo"),
     camera: document.getElementById("camera"),
+    pagesTaken: document.getElementById("pages-taken"),
+    pagesThumbs: document.getElementById("pages-thumbs"),
+    pagesCount: document.getElementById("pages-count"),
+    readPages: document.getElementById("read-pages"),
+    addPage: document.getElementById("add-page"),
+    clearPages: document.getElementById("clear-pages"),
     instrument: document.getElementById("instrument"),
     status: document.getElementById("status"),
     controls: document.getElementById("controls"),
@@ -414,11 +420,46 @@ for (const event of ["pointerdown", "keydown"]) {
 }
 ui.takePhoto.addEventListener("click", () => ui.camera.click());
 
+// Photos from the camera wait in a tray rather than being read straight
+// away, so a piece can be photographed page by page and read as one score.
+const pagesTaken = [];
+
+function showPagesTaken() {
+    for (const thumb of ui.pagesThumbs.querySelectorAll("img")) URL.revokeObjectURL(thumb.src);
+    ui.pagesThumbs.replaceChildren(...pagesTaken.map((photo, i) => {
+        const thumb = document.createElement("img");
+        thumb.src = URL.createObjectURL(photo);
+        thumb.alt = `Page ${i + 1}`;
+        return thumb;
+    }));
+    const count = pagesTaken.length;
+    ui.pagesCount.textContent = count === 1
+        ? "1 page. Add the next page of the piece, or read it."
+        : `${count} pages, read together as one score.`;
+    ui.readPages.textContent = count === 1 ? "Read it" : `Read ${count} pages`;
+    ui.addPage.disabled = count >= MAX_PAGES;
+    ui.pagesTaken.hidden = count === 0;
+}
+
 ui.camera.addEventListener("change", () => {
     const photo = ui.camera.files?.[0];
-    if (!photo) return;
-    loadFile(photo);
     ui.camera.value = "";
+    if (!photo) return;
+    pagesTaken.push(photo);
+    showPagesTaken();
+});
+
+ui.addPage.addEventListener("click", () => ui.camera.click());
+
+ui.readPages.addEventListener("click", () => {
+    const pages = pagesTaken.splice(0);
+    showPagesTaken();
+    loadFiles(pages, { inOrder: true });
+});
+
+ui.clearPages.addEventListener("click", () => {
+    pagesTaken.length = 0;
+    showPagesTaken();
 });
 
 // Only offer the camera where there is one: a desktop browser ignores the
@@ -568,7 +609,7 @@ function isPage(file) {
  * - and are read together, in name order (IMG_0001 before IMG_0002), into one
  * score. One file loads as itself.
  */
-async function loadFiles(files) {
+async function loadFiles(files, { inOrder = false } = {}) {
     if (files.length === 1) return loadFile(files[0]);
     player.stop();
     if (!files.every(isPage)) {
@@ -583,7 +624,10 @@ async function loadFiles(files) {
         setStatus(`${noReaderText} Save a Gemini key above to read these pages here.`, "error");
         return;
     }
-    const pages = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    // Photos taken one after another come in the order they were taken, and
+    // a phone may give them all the same name.
+    const pages = inOrder ? [...files]
+        : [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
     try {
         await transcribe(pages);
     } catch (error) {
@@ -922,7 +966,7 @@ function showElapsed(message, estimate = "usually one to four minutes") {
 function setUploadsEnabled(enabled) {
     // The visible buttons too, not only the inputs behind them: a live-looking
     // button that does nothing when tapped is worse than a disabled one.
-    for (const control of [ui.file, ui.camera, ui.chooseFile, ui.takePhoto, ...ui.samples]) {
+    for (const control of [ui.file, ui.camera, ui.chooseFile, ui.takePhoto, ui.readPages, ui.addPage, ...ui.samples]) {
         control.disabled = !enabled;
     }
 }
