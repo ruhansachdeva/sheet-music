@@ -109,11 +109,12 @@ export function checkMeasures(xml) {
 
 /**
  * Bars a reading has skipped: in each part, the numbers missing from the run
- * that starts at 1 (or at a pickup bar 0) and goes up to the last bar. Only
- * plain numbers count - "X1" and the like are left alone. Returns
- * [{ part, numbers }], one entry per part that has any missing.
+ * that starts at 1 (or at a pickup bar 0) and goes up to the last bar - or up
+ * to `last`, where the score is known to run that far. Only plain numbers
+ * count - "X1" and the like are left alone. Returns [{ part, numbers }], one
+ * entry per part that has any missing.
  */
-export function missingMeasures(xml) {
+export function missingMeasures(xml, last = 0) {
     const missing = [];
     for (const [, part, body] of xml.matchAll(/<part\s[^>]*\bid="([^"]*)"[^>]*>([\s\S]*?)<\/part>/g)) {
         const numbers = new Set(
@@ -121,7 +122,8 @@ export function missingMeasures(xml) {
         );
         if (!numbers.size) continue;
         const gaps = [];
-        for (let n = 1; n < Math.max(...numbers); n++) if (!numbers.has(n)) gaps.push(n);
+        const end = Math.max(Math.max(...numbers) - 1, Number.isInteger(last) ? last : 0);
+        for (let n = 1; n <= end; n++) if (!numbers.has(n)) gaps.push(n);
         if (gaps.length) missing.push({ part, numbers: gaps });
     }
     return missing;

@@ -39,6 +39,7 @@ check("escapes included", read.partialField('{"musicxml":"<a x=\\"1\\"/>\\n<b', 
 check("a cut mid-escape stops before it", read.partialField('{"t":"ab\\', "t"), "ab");
 check("a finished field is whole", read.partialField('{"t":"done","u":1}', "t"), "done");
 check("a field that never started is null", read.partialField('{"title":"x"', "musicxml"), null);
+check("a number is read once it is finished", [read.partialNumber('{"bars":47,"musicxml":"<', "bars"), read.partialNumber('{"bars":4', "bars")], [47, null]);
 
 const upTo2 = twinkle.slice(0, twinkle.indexOf(bar(2)) + bar(2).length);
 check("where a score stops", (({ number, part, partId, parts }) => ({ number, part, partId, parts }))(read.lastMeasure(upTo2)),
@@ -89,6 +90,24 @@ const filled = await read.transcribe(filling.generate, { file: {}, instrument: "
 check("skipped bars are asked for", /measures 1-2/.test(filling.asked[1].text), true);
 check("and put back in order", numbers(filled.musicxml), ["1", "2", "3", "4"]);
 check("the new first bar gets the time signature", [bar(1, filled.musicxml).includes("<divisions>"), filled.uneven, filled.missing], [true, [], []]);
+// An ending never written: the reader said the score runs to bar 4, and wrote two.
+const upToBar2 = twinkle.replace(bar(3), "").replace(bar(4), "");
+const ending = model(
+    JSON.stringify({ title: "Twinkle", bars: 4, musicxml: upToBar2, instrument: "piano", questions: [] }),
+    JSON.stringify({ measures: [3, 4].map((n) => ({ part: "P1", number: String(n), musicxml: bar(n) })) }),
+);
+const ended = await read.transcribe(ending.generate, { file: {}, instrument: "piano" });
+check("bars missing at the end are asked for", /measures 3-4/.test(ending.asked[1]?.text ?? ""), true);
+check("and put on the end", numbers(ended.musicxml), ["1", "2", "3", "4"]);
+const noCount = model(reading(upToBar2));
+check("without a bar count, a score that stops short is not second-guessed",
+    [(await read.transcribe(noCount.generate, { file: {}, instrument: "piano" })).missing, noCount.asked.length], [[], 1]);
+const cutLong = model(
+    { text: JSON.stringify({ title: "Twinkle", bars: 4, musicxml: twinkle.slice(0, twinkle.indexOf(bar(3)) + 20) }).slice(0, -2), incomplete: true },
+    { text: JSON.stringify({ rest: twinkle.slice(twinkle.indexOf(bar(3))), instrument: "piano", questions: [] }) },
+);
+await read.transcribe(cutLong.generate, { file: {}, instrument: "piano" });
+check("carrying on is told where the score ends", /runs to bar 4/.test(cutLong.asked[1].text), true);
 const unfilled = model(reading(skipped), JSON.stringify({ measures: [] }));
 check("bars still missing are named", (await read.transcribe(unfilled.generate, { file: {}, instrument: "piano" })).missing, [1, 2]);
 

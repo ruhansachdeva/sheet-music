@@ -291,6 +291,22 @@ async function run() {
             what: "the app to boot",
         });
 
+        // No fades or slides. Later in a run the headless tab stops drawing
+        // frames, and a transition then never finishes: an audit samples a
+        // button half way between two themes' colours, and a tap lands where
+        // the docked writer has not yet slid to. Checks are about where
+        // things end up, so they see the end state straight away - on this
+        // page, and on any it reloads to.
+        const still = `(() => {
+            const style = document.createElement("style");
+            style.textContent = "*, *::before, *::after { transition: none !important; animation: none !important; }";
+            (document.head ?? document.documentElement).append(style);
+        })()`;
+        await page.send("Page.addScriptToEvaluateOnNewDocument", {
+            source: `document.addEventListener("DOMContentLoaded", () => ${still});`,
+        });
+        await page.evaluate(still);
+
         // axe-core, the standard automated accessibility checker. The first
         // audit runs on the untouched first-run page: later sections change the
         // page enough that a contrast failure can go unseen mid-suite.
@@ -1900,6 +1916,14 @@ async function run() {
         // Where each note and rest is drawn right now. The score re-engraves
         // when the writer opens or closes, so this is asked afresh every time.
         const drawn = () => page.evaluate(`
+            // Sizes are noticed (ResizeObserver) only when a frame is drawn -
+            // the docked writer's height among them, which is what lets the
+            // score scroll clear of it - so let one be drawn first. Not
+            // forever: a tab in the background gets none.
+            await Promise.race([
+                new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+                new Promise((r) => setTimeout(r, 1000)),
+            ]);
             // Moving the position can set off a smooth scroll to show it:
             // measure only once the page has come to rest.
             let last = -1;

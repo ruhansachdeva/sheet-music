@@ -17,6 +17,13 @@ export const RESPONSE_SCHEMA = {
             type: "string",
             description: "The title of the piece, or a short description if the score has no title.",
         },
+        bars: {
+            type: "integer",
+            description:
+                "The number of the score's last bar, worked out before writing any MusicXML: the bar " +
+                "number printed at the start of the last system, plus the bars after it in that system " +
+                "(counting every page, if there are several).",
+        },
         musicxml: {
             type: "string",
             description: "The complete MusicXML 3.1 score-partwise document.",
@@ -49,7 +56,7 @@ export const RESPONSE_SCHEMA = {
             },
         },
     },
-    required: ["title", "musicxml", "instrument", "questions"],
+    required: ["title", "bars", "musicxml", "instrument", "questions"],
     additionalProperties: false,
 };
 
@@ -155,15 +162,16 @@ Transcribe every measure of every staff you can see. Write the notes at written 
  * `sofar` is the score up to its last finished measure; `where` is from
  * read.js's lastMeasure.
  */
-export function userPromptForContinuing(task, sofar, where) {
+export function userPromptForContinuing(task, sofar, where, bars) {
     const place = where.parts > 1 ? `measure ${where.number} of part ${where.part} of ${where.parts}` : `measure ${where.number}`;
     const after = where.parts > where.part
         ? "the measures after it, then </part> and the parts still to come"
         : "the measures after it, then </part>";
 
+    const end = Number.isInteger(bars) && bars > 0 ? ` The score runs to bar ${bars}, so there is more to write.` : "";
     return `${task}
 
-You have started this answer already, but it ran out of room part-way through the MusicXML. Here is the score as far as it got. It stops after ${place}:
+You have started this answer already, but it ran out of room part-way through the MusicXML. Here is the score as far as it got. It stops after ${place}.${end}
 
 ${sofar}
 
