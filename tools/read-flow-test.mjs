@@ -375,10 +375,38 @@ try {
     `);
     behaviour = "read";
     const stripCount = asked.length;
+    const pagesRead = asked.length + 1;
     check("is read", await stripsRead(), "Twinkle — read by Gemini");
     const sentStrips = asked[stripCount];
     check("from strips, each in full detail", sentStrips.images.length > 1 && sentStrips.images.every((r) => r === "ultra_high"), true);
     check("said to be one page in that many slices", sentStrips.strips, String(sentStrips.images.length));
+
+    console.log("\nseveral pages of one piece");
+    const severalRead = await evaluate(`
+        // Two small pages, chosen out of order: each too small to cut.
+        const page = async (shade) => {
+            const c = document.createElement("canvas");
+            c.width = 300; c.height = 200;
+            const g = c.getContext("2d");
+            g.fillStyle = shade; g.fillRect(0, 0, 300, 200);
+            return new Promise((r) => c.toBlob(r, "image/png"));
+        };
+        const input = document.getElementById("file");
+        const files = new DataTransfer();
+        files.items.add(new File([await page("#eee")], "IMG_0010.png", { type: "image/png" }));
+        files.items.add(new File([await page("#fff")], "IMG_0009.png", { type: "image/png" }));
+        input.files = files.files;
+        const before = window.sheetMusic.timeline;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        const status = document.getElementById("status");
+        for (let i = 0; i < 200 && window.sheetMusic.timeline === before && !status.classList.contains("error"); i++) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        return document.getElementById("piece-name").textContent;
+    `);
+    const both = asked.at(-1);
+    check("are read together, into one score", [severalRead, asked.length - stripCount], ["Twinkle — read by Gemini", 2]);
+    check("in one request with both pages, said to be in order", [both.images.length, both.strips], [2, "2"]);
 
     behaviour = "long";
     carriedOn = [];

@@ -50,7 +50,7 @@ app.get("/api/health", (_req, res) => {
 
 /** A photo or PDF in, MusicXML plus any clarifying questions out. */
 /** The page, and the strips the browser cut it into, if it did. */
-const page = upload.fields([{ name: "file", maxCount: 1 }, { name: "strips", maxCount: 12 }]);
+const page = upload.fields([{ name: "file", maxCount: 1 }, { name: "strips", maxCount: 100 }]);
 
 function uploaded(req) {
     const file = req.files?.file?.[0];

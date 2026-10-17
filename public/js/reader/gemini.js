@@ -81,7 +81,8 @@ export async function generate({ system, text, file, strips, schema }, settings)
     // is: the detail is the point of cutting the page up.
     const source = sourceItem(file);
     const input = strips?.length
-        ? [{ type: "text", text }, ...strips.map((strip) => ({ ...sourceItem(strip), resolution: "ultra_high" }))]
+        ? [{ type: "text", text }, ...strips.map(sourceItem).map((item) =>
+            item.type === "image" ? { ...item, resolution: "ultra_high" } : item)]
         : source.type === "document"
           ? [source, { type: "text", text }]
           : [{ type: "text", text }, source];
