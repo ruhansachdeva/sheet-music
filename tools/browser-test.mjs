@@ -1666,6 +1666,47 @@ async function run() {
             pdf.strips > 2 && pdf.stripNames[0] === "systems-page-1-1.png" && pdf.stripNames.at(-1).startsWith("systems-page-2"), true);
         check("a PDF that will not open is sent as it is", pdf.broken, 0);
 
+        // --- the screen stays on through a reading -------------------------
+        console.log("\nkeeping the screen on");
+        const wake = await page.evaluate(`
+            const { keepScreenOn } = await import("./js/wake.js");
+            // A stand-in for the Wake Lock API, counting what is held.
+            const log = [];
+            const locks = [];
+            const real = navigator.wakeLock;
+            Object.defineProperty(navigator, "wakeLock", { configurable: true, value: {
+                request: async (type) => {
+                    const lock = { released: false, release: async () => { lock.released = true; log.push("release"); } };
+                    log.push("request " + type);
+                    locks.push(lock);
+                    return lock;
+                },
+            } });
+            const tick = () => new Promise((r) => setTimeout(r, 20));
+            const letGo = keepScreenOn();
+            await tick();
+            const held = [...log];
+            // The browser lets go when the page is hidden; coming back takes it again.
+            log.length = 0;
+            document.dispatchEvent(new Event("visibilitychange"));
+            await tick();
+            const whileHeld = [...log];
+            locks.at(-1).released = true; // as the browser does when the page is hidden
+            document.dispatchEvent(new Event("visibilitychange"));
+            await tick();
+            const retaken = log.slice(whileHeld.length);
+            log.length = 0;
+            letGo();
+            await tick();
+            const after = [...log];
+            Object.defineProperty(navigator, "wakeLock", { configurable: true, value: real });
+            return { held, whileHeld, retaken, after };
+        `);
+        check("a reading holds the screen on", wake.held, ["request screen"]);
+        check("without asking twice while it has it", wake.whileHeld, []);
+        check("taking it again when the page comes back", wake.retaken, ["request screen"]);
+        check("and lets it go when the reading ends", wake.after, ["release"]);
+
         // --- the clarifying question panel ----------------------------------
         console.log("\nclarifying questions");
         const asked = await page.evaluate(`
