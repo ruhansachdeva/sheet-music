@@ -431,9 +431,9 @@ if (hasCamera()) {
 }
 
 ui.file.addEventListener("change", () => {
-    const file = ui.file.files?.[0];
-    if (!file) return;
-    loadFile(file);
+    const files = [...(ui.file.files ?? [])];
+    if (!files.length) return;
+    loadFiles(files);
     // Clear it, so picking the same file again still fires a change event.
     ui.file.value = "";
 });
@@ -454,11 +454,11 @@ document.addEventListener("dragleave", (event) => {
 });
 
 document.addEventListener("drop", (event) => {
-    const file = event.dataTransfer?.files?.[0];
-    if (!file) return;
+    const files = [...(event.dataTransfer?.files ?? [])];
+    if (!files.length) return;
     event.preventDefault();
     document.body.classList.remove("dropping");
-    loadFile(file);
+    loadFiles(files);
 });
 
 // The docked bar keeps only play, stop and position; the rest slides up.
@@ -553,6 +553,43 @@ window.addEventListener("unhandledrejection", (event) => {
 });
 
 // --- loading ----------------------------------------------------------------
+
+/** The most pages read together: each is several images in the request. */
+const MAX_PAGES = 12;
+
+/** A file that is a page to be read: a photo, a scan, an SVG or a PDF. */
+function isPage(file) {
+    return file.type.startsWith("image/") || file.type === "application/pdf" || isSvg(file);
+}
+
+/**
+ * Several files at once are the pages of one piece - photos of each page, say
+ * - and are read together, in name order (IMG_0001 before IMG_0002), into one
+ * score. One file loads as itself.
+ */
+async function loadFiles(files) {
+    if (files.length === 1) return loadFile(files[0]);
+    player.stop();
+    if (!files.every(isPage)) {
+        setStatus("Several files can be read together when they are all photos or PDFs - the pages of one piece. Open other files one at a time.", "error");
+        return;
+    }
+    if (files.length > MAX_PAGES) {
+        setStatus(`That is ${files.length} pages; up to ${MAX_PAGES} can be read together.`, "error");
+        return;
+    }
+    if (!canRead) {
+        setStatus(`${noReaderText} Save a Gemini key above to read these pages here.`, "error");
+        return;
+    }
+    const pages = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    try {
+        await transcribe(pages);
+    } catch (error) {
+        console.error(error);
+        setStatus(`Could not read those pages: ${error.message}`, "error");
+    }
+}
 
 async function loadFile(file) {
     const name = file.name.toLowerCase();
@@ -712,12 +749,31 @@ async function showPianoRoll(arrayBuffer, label) {
     askAboutInstrument(guessInstrument({ names: timeline.instrumentNames, drumShare: drumShare(timeline) }));
 }
 
-/** A photo or a PDF: it is read into MusicXML, then rendered like any score. */
-async function transcribe(original) {
+/**
+ * A photo or a PDF - or several, the pages of one piece - is read into
+ * MusicXML, then rendered like any score.
+ */
+async function transcribe(originals) {
+    const pages = [originals].flat();
     questionPanel.hide();
-    setStatus(original.type === "application/pdf" ? "Preparing the pages…" : "Preparing the photo…", "busy");
-    const file = await preparePhoto(original);
-    const strips = await stripsOf(file);
+    setStatus(
+        pages.length > 1 ? `Preparing ${pages.length} pages…`
+            : pages[0].type === "application/pdf" ? "Preparing the pages…" : "Preparing the photo…",
+        "busy",
+    );
+    const prepared = [];
+    for (const page of pages) prepared.push(await preparePhoto(page));
+    const file = prepared[0];
+    // Every page in strips, in order; a page that will not cut goes whole.
+    let strips = [];
+    if (prepared.length === 1) {
+        strips = await stripsOf(file);
+    } else {
+        for (const page of prepared) {
+            const cut = await stripsOf(page);
+            strips.push(...(cut.length ? cut : [page]));
+        }
+    }
 
     const body = new FormData();
     body.append("file", file);
