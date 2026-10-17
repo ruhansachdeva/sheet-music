@@ -1,0 +1,65 @@
+# Runs every check on each pull request - the browser ones included - so a
+# change is tested before it reaches main, and the hosted site with it.
+
+name: Checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    name: Samples, writer, reader and server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci || npm install
+
+      - name: Samples add up
+        run: npm run check
+
+      - name: Note writer
+        run: npm run test:editor
+
+      - name: A busy reader
+        run: npm run test:provider
+
+      - name: Putting a reading together
+        run: npm run test:reader
+
+      - name: Server routes
+        run: npm run test:api
+
+  browser:
+    name: In a browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The runner's own Chrome. Its sandbox is blocked on these runners, so
+      # it starts without one - it only ever opens this app.
+      CHROME_PATH: /usr/bin/google-chrome
+      CHROME_FLAGS: --no-sandbox
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci || npm install
+
+      - name: The app, driven in Chrome
+        run: npm test
+
+      - name: Reading a photo, against a stand-in reader
+        run: npm run test:read-flow
