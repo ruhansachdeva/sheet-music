@@ -65,6 +65,13 @@ try {
         (await post("/api/refine", { file: PIXEL, instrument: "piano", musicxml: "<score-partwise/>" })).status,
         400,
     );
+    check("reread without musicxml", (await post("/api/reread", { file: PIXEL, instrument: "piano", bars: "[2]" })).status, 400);
+    check("reread without bars",
+        (await post("/api/reread", { file: PIXEL, instrument: "piano", musicxml: "<score-partwise/>" })).status, 400);
+    check("reread with bars that are not a list",
+        (await post("/api/reread", { file: PIXEL, instrument: "piano", musicxml: "<score-partwise/>", bars: "nope" })).status, 400);
+    const asked = await post("/api/reread", { file: PIXEL, instrument: "piano", musicxml: "<score-partwise/>", bars: "[2]" });
+    check("a good reread gets as far as needing a key", asked.status === 500 && /API key/i.test(asked.body.error ?? ""), true);
 } finally {
     server.kill();
 }
