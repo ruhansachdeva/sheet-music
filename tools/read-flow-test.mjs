@@ -48,6 +48,12 @@ const asked = [];
 let behaviour = "read";
 // For a page too long for one answer: where each request said the score stopped.
 let carriedOn = [];
+// Twinkle with bar 2's first note read as an eighth, so the bar comes up short;
+// and what a recheck of it was asked, and whether it can fix it.
+const bar2 = /<measure number="2"[\s\S]*?<\/measure>/.exec(twinkle)[0];
+const misread = twinkle.replace(bar2, bar2.replace("<duration>480</duration>", "<duration>240</duration>"));
+let rechecked = [];
+let recheckFixes = true;
 
 const reader = createServer(async (request, response) => {
     // The page on the hosted site calls Gemini straight from the browser, so
@@ -89,6 +95,14 @@ const reader = createServer(async (request, response) => {
               ? [cut({ rest: twinkle.slice(at(1), at(3) + 30) }), "incomplete"]
               : [JSON.stringify({ rest: twinkle.slice(at(3)), instrument: "piano", questions: [] }), "completed"];
         return streamed(output, status);
+    }
+    if (behaviour === "uneven") {
+        if (!text.includes("do not add up")) {
+            return streamed(JSON.stringify({ title: "Twinkle", musicxml: misread, instrument: "piano", questions: [] }));
+        }
+        rechecked.push(/Measure (\d+), voice 1: its durations total (\d+)/.exec(text)?.slice(1));
+        const fixed = recheckFixes ? bar2 : /<measure number="2"[\s\S]*?<\/measure>/.exec(misread)[0];
+        return streamed(JSON.stringify({ measures: [{ part: "P1", number: "2", musicxml: fixed }] }));
     }
     const refining = text.includes("My answers:");
     asked.push({
@@ -317,10 +331,13 @@ try {
         const piece = document.getElementById("piece-name");
         const status = document.getElementById("status");
         const said = new Set();
-        for (let i = 0; i < 120 && !/read by/.test(piece.textContent); i++) {
+        // The uploads lock while it reads, and unlock when it is done - the
+        // piece's name may already say "read by" from the reading before.
+        const locked = () => document.getElementById("choose-file").disabled;
+        for (let i = 0; i < 50 && !locked(); i++) await new Promise((r) => setTimeout(r, 50));
+        for (let i = 0; i < 200 && locked(); i++) {
             await new Promise((r) => setTimeout(r, 100));
             said.add(status.textContent.replace(/\\d+:\\d\\d/, "m:ss"));
-            if (status.classList.contains("error")) break;
         }
         return {
             piece: piece.textContent,
@@ -333,6 +350,21 @@ try {
     const long = await longRead();
     check("it is read over several answers", carriedOn, [null, "1", "2"]);
     check("and comes out whole", [long.piece, long.notes], ["Twinkle — read by Gemini", 35]);
+
+    console.log("\na bar that does not add up");
+    behaviour = "uneven";
+    rechecked = [];
+    recheckFixes = true;
+    const evened = await longRead();
+    const status = () => evaluate(`return document.getElementById("status").textContent`);
+    check("is sent back to be looked at again, saying what it totals", rechecked, [["2", "1680"]]);
+    check("and the corrected bar goes in", [evened.piece, evened.notes], ["Twinkle — read by Gemini", 35]);
+    check("leaving nothing to warn about", /add up/.test(await status()), false);
+    rechecked = [];
+    recheckFixes = false;
+    await longRead();
+    check("a bar the recheck cannot fix is pointed out",
+        /Bar 2 does not add up to the time signature/.test(await status()), true);
     behaviour = "read";
     // --- the hosted copy, reading with your own key -----------------------
     // The static build, as GitHub Pages serves it: no server, an api/health
@@ -446,6 +478,13 @@ try {
     check("and comes out whole", [longHere.piece, longHere.notes], ["Twinkle — read by Gemini", 35]);
     check("saying which bar it is carrying on after",
         longHere.said.some((s) => /— carrying on after bar 2 · Reading the Staff$/.test(s)), true);
+    behaviour = "uneven";
+    rechecked = [];
+    recheckFixes = true;
+    const evenedHere = await longRead();
+    check("a bar that does not add up is rechecked here too", [rechecked.length, evenedHere.notes], [1, 35]);
+    check("saying so while it does",
+        evenedHere.said.some((s) => /— rechecking 1 bar that did not add up · Reading the Staff$/.test(s)), true);
     behaviour = "read";
 
     // The key is remembered on the next visit, and can be forgotten.
