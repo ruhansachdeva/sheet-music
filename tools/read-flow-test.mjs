@@ -46,6 +46,8 @@ const timing = readFileSync(join(ROOT, "samples/timing-test.musicxml"), "utf8");
 const asked = [];
 // What the stand-in does: read normally, or fail the way Gemini can.
 let behaviour = "read";
+// For a page too long for one answer: where each request said the score stopped.
+let carriedOn = [];
 
 const reader = createServer(async (request, response) => {
     // The page on the hosted site calls Gemini straight from the browser, so
@@ -73,6 +75,21 @@ const reader = createServer(async (request, response) => {
     }
     const { input = [], stream } = JSON.parse(body || "{}");
     const text = input.find((item) => item.type === "text")?.text ?? "";
+    // A page too dense for one answer: the first stops part-way through bar
+    // 2; the next starts again at bar 1 and stops part-way through bar 3; the
+    // last finishes. Put together, it is Twinkle.
+    if (behaviour === "long") {
+        const after = /It stops after measure (\d+)/.exec(text)?.[1] ?? null;
+        carriedOn.push(after);
+        const at = (n) => twinkle.indexOf(`<measure number="${n}"`);
+        const cut = (fields) => JSON.stringify(fields).slice(0, -2); // no closing quote and brace
+        const [output, status] = after === null
+            ? [cut({ title: "Twinkle", musicxml: twinkle.slice(0, at(2) + 30) }), "incomplete"]
+            : after === "1"
+              ? [cut({ rest: twinkle.slice(at(1), at(3) + 30) }), "incomplete"]
+              : [JSON.stringify({ rest: twinkle.slice(at(3)), instrument: "piano", questions: [] }), "completed"];
+        return streamed(output, status);
+    }
     const refining = text.includes("My answers:");
     asked.push({
         refining,
@@ -92,16 +109,20 @@ const reader = createServer(async (request, response) => {
                 instrument: "violin",
                 questions: [{ id: "q1", measure: 2, question: "Is bar 2 a tie or a slur?", options: ["Tie", "Slur"] }],
             };
+    return streamed(JSON.stringify(answer));
+
     // Streamed as Gemini streams it: a summary of the thinking straight away,
     // then - 1.5s later, so the page is seen mid-read - the answer.
-    const event = (e) => `event: ${e.event_type}\ndata: ${JSON.stringify(e)}\n\n`;
-    response.writeHead(200, { "content-type": "text/event-stream", ...cors });
-    response.write(event({ event_type: "step.start", index: 0, step: { type: "thought" } }));
-    response.write(event({ event_type: "step.delta", index: 0, delta: { type: "thought_summary", content: { text: "**Reading the Staff**\n\nTreble clef." } } }));
-    await sleep(1500);
-    response.write(event({ event_type: "step.start", index: 1, step: { type: "model_output" } }));
-    response.write(event({ event_type: "step.delta", index: 1, delta: { type: "text", text: JSON.stringify(answer) } }));
-    response.end(event({ event_type: "interaction.completed", interaction: { model: "stand-in", status: "completed" } }));
+    async function streamed(output, status = "completed") {
+        const event = (e) => `event: ${e.event_type}\ndata: ${JSON.stringify(e)}\n\n`;
+        response.writeHead(200, { "content-type": "text/event-stream", ...cors });
+        response.write(event({ event_type: "step.start", index: 0, step: { type: "thought" } }));
+        response.write(event({ event_type: "step.delta", index: 0, delta: { type: "thought_summary", content: { text: "**Reading the Staff**\n\nTreble clef." } } }));
+        await sleep(1500);
+        response.write(event({ event_type: "step.start", index: 1, step: { type: "model_output" } }));
+        response.write(event({ event_type: "step.delta", index: 1, delta: { type: "text", text: output } }));
+        response.end(event({ event_type: "interaction.completed", interaction: { model: "stand-in", status } }));
+    }
 });
 reader.listen(0);
 await once(reader, "listening");
@@ -281,6 +302,37 @@ try {
     const notMusic = await failedRead();
     check("a photo that is not music is said to be so", /not.*sheet music/i.test(notMusic.said), true);
     check("and unlocks the uploads", notMusic.unlocked, true);
+
+    console.log("\na page too long for one answer");
+    const longRead = () => evaluate(`
+        const canvas = document.createElement("canvas");
+        canvas.width = 60;
+        canvas.height = 60;
+        const png = await new Promise((r) => canvas.toBlob(r, "image/png"));
+        const input = document.getElementById("file");
+        const files = new DataTransfer();
+        files.items.add(new File([png], "dense.png", { type: "image/png" }));
+        input.files = files.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        const piece = document.getElementById("piece-name");
+        const status = document.getElementById("status");
+        const said = new Set();
+        for (let i = 0; i < 120 && !/read by/.test(piece.textContent); i++) {
+            await new Promise((r) => setTimeout(r, 100));
+            said.add(status.textContent.replace(/\\d+:\\d\\d/, "m:ss"));
+            if (status.classList.contains("error")) break;
+        }
+        return {
+            piece: piece.textContent,
+            notes: window.sheetMusic.timeline.notes.length,
+            said: [...said],
+        };
+    `);
+    behaviour = "long";
+    carriedOn = [];
+    const long = await longRead();
+    check("it is read over several answers", carriedOn, [null, "1", "2"]);
+    check("and comes out whole", [long.piece, long.notes], ["Twinkle — read by Gemini", 35]);
     behaviour = "read";
     // --- the hosted copy, reading with your own key -----------------------
     // The static build, as GitHub Pages serves it: no server, an api/health
@@ -386,6 +438,15 @@ try {
     check("and the answer applied", [hostedRead.corrected, hostedRead.bpm], ["Twinkle — corrected", 96]);
     check("the page sent the photo, with your key, streamed",
         fromPage.map((a) => [a.withImage, a.key, a.stream]), [[true, "my-own-key", true], [true, "my-own-key", true]]);
+
+    behaviour = "long";
+    carriedOn = [];
+    const longHere = await longRead();
+    check("a page too long for one answer is read over several here too", carriedOn, [null, "1", "2"]);
+    check("and comes out whole", [longHere.piece, longHere.notes], ["Twinkle — read by Gemini", 35]);
+    check("saying which bar it is carrying on after",
+        longHere.said.some((s) => /— carrying on after bar 2 · Reading the Staff$/.test(s)), true);
+    behaviour = "read";
 
     // The key is remembered on the next visit, and can be forgotten.
     await send("Page.navigate", { url: hosted });

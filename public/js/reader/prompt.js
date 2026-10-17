@@ -53,11 +53,33 @@ export const RESPONSE_SCHEMA = {
     additionalProperties: false,
 };
 
+/**
+ * The shape of an answer that carries on with a score where the last one ran
+ * out of room: the rest of the document, and the same instrument and
+ * questions, now that the whole page has been read.
+ */
+export const CONTINUATION_SCHEMA = {
+    type: "object",
+    properties: {
+        rest: {
+            type: "string",
+            description:
+                "The rest of the MusicXML document: everything after the last </measure> of the score " +
+                "so far, through the closing </score-partwise>.",
+        },
+        instrument: RESPONSE_SCHEMA.properties.instrument,
+        questions: RESPONSE_SCHEMA.properties.questions,
+    },
+    required: ["rest", "instrument", "questions"],
+    additionalProperties: false,
+};
+
 export const SYSTEM_PROMPT = `You read photographs and PDFs of sheet music and turn them into MusicXML.
 
 Output a complete, valid MusicXML 3.1 \`score-partwise\` document:
 
 - A full document: XML declaration, DOCTYPE, <score-partwise version="3.1">, <part-list> with a <score-part> per staff group, and one <part> per score-part.
+- Compact, because the whole score has to fit in one answer: no indentation, line breaks or comments between elements, and nothing that only shapes the printed page - no <identification>, <defaults>, <credit>, <print>, <stem> or <beam>, and no default-x or other position attributes. The player lays out, stems and beams the music itself.
 - <attributes> in the first measure with <divisions>, <key>, <time> and a <clef> per staff. Pick divisions that make every duration in the piece a whole number (480 is a safe default; it divides into triplets, sixteenths and dotted notes).
 - Tempo as <direction> with <sound tempo="..."/> and a <metronome> display, taken from the score's marking. The <metronome> shows the mark as printed - its <beat-unit>, any <beat-unit-dot/>, and <per-minute>. <sound tempo> is ALWAYS quarter notes per minute, so convert: dotted quarter = 60 is tempo 90, half = 60 is tempo 120, eighth = 120 is tempo 60. If the score has no tempo marking, leave the tempo out rather than inventing one.
 - Every measure's durations must add up to the time signature, in every voice. Check each measure before moving on: sum the <duration> values per voice and compare against divisions × beats. This is the most common mistake - if a measure does not add up, you have misread a note, a dot or a rest.
@@ -70,7 +92,7 @@ Output a complete, valid MusicXML 3.1 \`score-partwise\` document:
 - Repeats as <barline> with <bar-style>, <repeat direction="forward"/> or <repeat direction="backward"/>, and endings as <ending> when the score shows them.
 - Drums and other unpitched percussion: a <score-instrument> plus <midi-instrument> per kit piece, with <midi-channel>10</midi-channel> and the General MIDI <midi-unpitched> number (counting from 1, so the bass drum is 37), notes written as <unpitched> with <display-step> and <display-octave>, and an <instrument> reference on every note.
 - Pitches at WRITTEN pitch, exactly as printed on the page. Do not transpose to concert pitch - the player handles that.
-- Dynamics, articulations, slurs and beams where you can read them.
+- Dynamics, articulations and slurs where you can read them.
 
 Say which instrument the page is written for in \`instrument\`, separately from the instrument it will be played on, which the user gives you. Read it from the page: a part name ("Clarinet in B♭"), the clef and range, or the notation - a percussion clef with x noteheads is a drum kit. Say unknown when the page does not make it clear. Transcribe what is printed either way: if drum notation is played back on a flute, it is still drum notation.
 
@@ -94,6 +116,28 @@ export function userPromptForTranscribe(instrument) {
 The player will play it back as: ${instrument}. Use that to read the score - it tells you which clef and range to expect, and whether two staves belong to one player (piano) or one staff is the whole part.
 
 Transcribe every measure of every staff you can see. Write the notes at written pitch, as printed.`;
+}
+
+/**
+ * Carrying on with an answer that ran out of room. `task` is what was asked;
+ * `sofar` is the score up to its last finished measure; `where` is from
+ * read.js's lastMeasure.
+ */
+export function userPromptForContinuing(task, sofar, where) {
+    const place = where.parts > 1 ? `measure ${where.number} of part ${where.part} of ${where.parts}` : `measure ${where.number}`;
+    const after = where.parts > where.part
+        ? "the measures after it, then </part> and the parts still to come"
+        : "the measures after it, then </part>";
+
+    return `${task}
+
+You have started this answer already, but it ran out of room part-way through the MusicXML. Here is the score as far as it got. It stops after ${place}:
+
+${sofar}
+
+Carry on from exactly where it stops. In \`rest\`, write only what comes after that last </measure>: ${after}, through </score-partwise>. Do not repeat anything already written. Keep to the same divisions, instrument ids, voices and compact style. If that part is already finished, \`rest\` starts with </part>.
+
+Give \`instrument\` and \`questions\` for the whole page, as you would have at the end of the first answer.`;
 }
 
 export function userPromptForRefine(instrument, musicxml, answers) {

@@ -290,13 +290,7 @@ async function call(config, path, init) {
 }
 
 function readResult(body, model) {
-    if (body.status === "incomplete") {
-        throw new ReadError(
-            "The score was too long to transcribe in one go. Try a single page or a tighter crop.",
-            413,
-        );
-    }
-    if (body.status !== "completed" || body.errors?.length) {
+    if (!["completed", "incomplete"].includes(body.status) || body.errors?.length) {
         const why = body.error?.message ?? body.errors?.[0]?.message ?? `the read ended as ${body.status}`;
         throw new ReadError(`Gemini could not read this file (${why}).`, 422);
     }
@@ -309,12 +303,26 @@ function readResult(body, model) {
         .map((item) => item.text)
         .join("");
 
+    // Incomplete is the output budget running out. Thinking comes out of the
+    // same budget, so a read can be cut off before writing anything at all.
+    const incomplete = body.status === "incomplete";
+    if (incomplete && !text) {
+        throw new ReadError(
+            "Gemini spent its whole answer working out the page and had no room left to write it " +
+                "down. Try again, or try a tighter crop.",
+            413,
+        );
+    }
+
     return {
         text,
+        // Cut off part-way: the reading carries on from where it got to.
+        incomplete,
         model: body.model ?? model,
         usage: {
             input: body.usage?.total_input_tokens,
             output: body.usage?.total_output_tokens,
+            thinking: body.usage?.total_thought_tokens,
         },
     };
 }
