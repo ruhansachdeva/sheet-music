@@ -152,7 +152,9 @@ export class Score {
             const available = svg.getBoundingClientRect().width;
             const box = svg.getBBox();
             const needed = Math.max(box.width, box.x + box.width);
-            if (available <= 0 || needed <= 0) return;
+            // Nothing to measure (hidden, or empty): leave the zoom alone, but
+            // still put back what the render wiped.
+            if (available <= 0 || needed <= 0) break;
 
             const fits = needed <= available + 1 && box.x >= -1;
             if (fits) break;
@@ -170,8 +172,9 @@ export class Score {
         return this.osmd.zoom;
     }
 
-    /** A re-render replaces the SVG, so the cursor and colours start over. */
+    /** A re-render replaces the SVG, so the cursor, colours and marks start over. */
     restoreCursor() {
+        this.drawMarks();
         const step = this.stepIndex;
         this.litElements = [];
         this.stepIndex = -1;
@@ -200,6 +203,7 @@ export class Score {
             this.showingPartNames = false;
         }
         this.trimPageMargins();
+        this.marked = new Set();
         this.osmd.zoom = 1;
         this.osmd.render();
         if (this.userZoom === null) this.fitToWidth();
@@ -467,6 +471,52 @@ export class Score {
             }
         }
         return best ? best.note.getAbsoluteTimestamp().RealValue : null;
+    }
+
+    /**
+     * Shades the bars with these numbers - ones a reading got wrong - so they
+     * can be found on the score rather than counted to. Until the next score.
+     */
+    markBars(numbers) {
+        this.marked = new Set((numbers ?? []).map(String));
+        this.drawMarks();
+    }
+
+    drawMarks() {
+        const svg = this.container.querySelector("svg");
+        if (!svg) return;
+        for (const old of svg.querySelectorAll(".bar-mark")) old.remove();
+        if (!this.marked?.size) return;
+
+        // OSMD lays out in units of 10 pixels at zoom 1.
+        const unit = 10 * this.osmd.zoom;
+        for (const staves of this.osmd.GraphicSheet?.MeasureList ?? []) {
+            const shown = staves.filter(Boolean);
+            const number = shown[0]?.MeasureNumber ?? shown[0]?.parentSourceMeasure?.MeasureNumber;
+            if (!shown.length || !this.marked.has(String(number))) continue;
+
+            // Every staff of the bar, top to bottom, as one box.
+            const boxes = shown.map(({ PositionAndShape: p }) => ({
+                left: p.AbsolutePosition.x + p.BorderLeft,
+                right: p.AbsolutePosition.x + p.BorderRight,
+                top: p.AbsolutePosition.y + p.BorderTop,
+                bottom: p.AbsolutePosition.y + p.BorderBottom,
+            }));
+            const left = Math.min(...boxes.map((b) => b.left));
+            const right = Math.max(...boxes.map((b) => b.right));
+            const top = Math.min(...boxes.map((b) => b.top)) - 1;
+            const bottom = Math.max(...boxes.map((b) => b.bottom)) + 1;
+
+            const mark = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            mark.setAttribute("class", "bar-mark");
+            mark.setAttribute("x", left * unit);
+            mark.setAttribute("y", top * unit);
+            mark.setAttribute("width", (right - left) * unit);
+            mark.setAttribute("height", (bottom - top) * unit);
+            mark.setAttribute("rx", 4);
+            // Behind the notes, so they stay readable.
+            svg.insertBefore(mark, svg.firstChild);
+        }
     }
 
     reset() {

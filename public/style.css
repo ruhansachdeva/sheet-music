@@ -539,6 +539,14 @@ html:has(body.has-transport) {
     stroke: var(--lit);
 }
 
+/* A bar a reading got wrong. The score is always on white paper, so this is
+   the light theme's warning colour in dark mode too. */
+.bar-mark {
+    fill: #fbe9c4;
+    stroke: #d9a441;
+    stroke-width: 1.5;
+}
+
 .roll {
     --roll-scale: 1;
 }
