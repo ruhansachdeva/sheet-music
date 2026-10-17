@@ -91,15 +91,15 @@ const reader = createServer(async (request, response) => {
     // A page too dense for one answer: the first stops part-way through bar
     // 2; the next starts again at bar 1 and stops part-way through bar 3; the
     // last finishes. Put together, it is Twinkle.
-    if (behaviour === "long") {
+    if (behaviour === "long" || behaviour === "cut") {
         const after = /It stops after measure (\d+)/.exec(text)?.[1] ?? null;
         carriedOn.push(after);
         const at = (n) => twinkle.indexOf(`<measure number="${n}"`);
         const cut = (fields) => JSON.stringify(fields).slice(0, -2); // no closing quote and brace
         const [output, status] = after === null
-            ? [cut({ title: "Twinkle", musicxml: twinkle.slice(0, at(2) + 30) }), "incomplete"]
+            ? [cut({ title: "Twinkle", musicxml: twinkle.slice(0, at(2) + 30) }), behaviour === "cut" ? "cut" : "incomplete"]
             : after === "1"
-              ? [cut({ rest: twinkle.slice(at(1), at(3) + 30) }), "incomplete"]
+              ? [cut({ rest: twinkle.slice(at(1), at(3) + 30) }), behaviour === "cut" ? "cut" : "incomplete"]
               : [JSON.stringify({ rest: twinkle.slice(at(3)), instrument: "piano", questions: [] }), "completed"];
         return streamed(output, status);
     }
@@ -156,6 +156,8 @@ const reader = createServer(async (request, response) => {
         await sleep(1500);
         response.write(event({ event_type: "step.start", index: 1, step: { type: "model_output" } }));
         response.write(event({ event_type: "step.delta", index: 1, delta: { type: "text", text: output } }));
+        // "cut": the stream just stops, as a browser's does at about five minutes.
+        if (status === "cut") return response.end();
         response.end(event({ event_type: "interaction.completed", interaction: { model: "stand-in", status } }));
     }
 });
@@ -610,6 +612,12 @@ try {
     check("and comes out whole", [longHere.piece, longHere.notes], ["Twinkle — read by Gemini", 35]);
     check("saying which bar it is carrying on after",
         longHere.said.some((s) => /— carrying on after bar 2 · Reading the Staff$/.test(s)), true);
+    behaviour = "cut";
+    carriedOn = [];
+    const cutHere = await longRead();
+    check("a stream cut part-way here is carried on from what it wrote", carriedOn, [null, "1", "2"]);
+    check("and comes out whole", [cutHere.piece, cutHere.notes], ["Twinkle — read by Gemini", 35]);
+
     behaviour = "uneven";
     rechecked = [];
     recheckFixes = true;
