@@ -111,6 +111,32 @@ check("carrying on is told where the score ends", /runs to bar 4/.test(cutLong.a
 const unfilled = model(reading(skipped), JSON.stringify({ measures: [] }));
 check("bars still missing are named", (await read.transcribe(unfilled.generate, { file: {}, instrument: "piano" })).missing, [1, 2]);
 
+console.log("\nreading a bar again");
+// Bar 2 read with its first two notes swapped: it adds up, but it is wrong.
+const swapped = bar(2).replace("<step>A</step>", "<step>B</step>");
+const misread = twinkle.replace(bar(2), swapped);
+const again = model(JSON.stringify({ measures: [{ part: "P1", number: "2", musicxml: bar(2) }] }));
+const reread = await read.reread(again.generate, { file: {}, instrument: "piano", musicxml: misread, bars: [2] });
+check("a bar named is looked at again", /found measure 2 read wrong/.test(again.asked[0].text), true);
+check("and the corrected bar goes in", [reread.musicxml === twinkle, reread.changed], [true, ["2"]]);
+const same = model(JSON.stringify({ measures: [{ part: "P1", number: "2", musicxml: bar(2) }] }));
+check("a bar found right after all is not counted as changed",
+    (await read.reread(same.generate, { file: {}, instrument: "piano", musicxml: twinkle, bars: ["2"] })).changed, []);
+const breaking = model(JSON.stringify({ measures: [{ part: "P1", number: "2",
+    musicxml: bar(2).replace("<duration>480</duration>", "<duration>240</duration>") }] }));
+check("a correction that stops a bar adding up is refused",
+    (await read.reread(breaking.generate, { file: {}, instrument: "piano", musicxml: misread, bars: [2] })).changed, []);
+const stray = model(JSON.stringify({ measures: [{ part: "P1", number: "3", musicxml: bar(3) }] }));
+check("bars not asked about are left alone",
+    (await read.reread(stray.generate, { file: {}, instrument: "piano", musicxml: misread, bars: [2] })).changed, []);
+let none;
+try {
+    await read.reread(model("{}").generate, { file: {}, instrument: "piano", musicxml: twinkle, bars: [] });
+} catch (error) {
+    none = error.status;
+}
+check("asking about no bars is refused", none, 400);
+
 console.log("\ncutting a page into strips");
 // Ten systems of 120 rows with 85 rows of paper between, under a title.
 const page = new Array(2400).fill(0);
