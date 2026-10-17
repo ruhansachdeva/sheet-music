@@ -307,7 +307,7 @@ its systems, where the paper is blank. A model sees an image through a fixed
 number of tokens however big it is, so a dense page sent whole is squeezed
 until noteheads and dots blur: on a page of sixteenth-note drums, reading it
 whole got about a third of the hits right; in strips of a system or two, each
-sent at full resolution, about four in five. The strips all go in one request.
+sent at full resolution, about three in four. The strips all go in one request.
 
 The reader gets a strict JSON schema for its answer and is asked for complete,
 compact MusicXML 3.1 at written pitch - no layout the player redoes itself, so
