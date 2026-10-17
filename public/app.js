@@ -8,6 +8,7 @@ import { Player } from "./js/player.js";
 import { QuestionPanel } from "./js/questions.js";
 import { Editor } from "./js/editor/ui.js";
 import { isSvg, preparePhoto, stripsOf } from "./js/photo.js";
+import { keepScreenOn } from "./js/wake.js";
 import * as ownKey from "./js/reader/browser.js";
 import { guessInstrument } from "./js/instrument-guess.js";
 
@@ -876,6 +877,8 @@ async function sendAnswers(answers) {
  */
 function showElapsed(message) {
     reading = true;
+    // A locked screen would suspend the page and drop the reading.
+    const letScreenSleep = keepScreenOn();
     const started = Date.now();
     let detail = "usually one to four minutes";
     const tick = () => {
@@ -887,6 +890,7 @@ function showElapsed(message) {
     const timer = setInterval(tick, 1000);
     const stop = () => {
         clearInterval(timer);
+        letScreenSleep();
         reading = false;
     };
     // What the reader says it is working on, in place of the estimate - only
