@@ -472,10 +472,15 @@ try {
         const before = window.sheetMusic.timeline;
         await take(await photo(300, 200));
         const one = { shown: !tray.hidden, said: document.getElementById("pages-count").textContent };
+        await take(await photo(240, 240));
         await take(await photo(200, 300));
+        // The middle one came out blurry: it goes on its own.
+        tray.querySelectorAll(".page-remove")[1].click();
+        await new Promise((r) => setTimeout(r, 50));
         const two = {
             thumbs: tray.querySelectorAll("img").length,
             button: document.getElementById("read-pages").textContent,
+            labels: [...tray.querySelectorAll(".page-remove")].map((b) => b.getAttribute("aria-label")),
         };
         document.getElementById("read-pages").click();
         const status = document.getElementById("status");
@@ -485,7 +490,8 @@ try {
         return { one, two, emptied: tray.hidden, piece: document.getElementById("piece-name").textContent };
     `);
     check("a photo waits in the tray", [taken.one.shown, /1 page/.test(taken.one.said)], [true, true]);
-    check("and the next joins it", [taken.two.thumbs, taken.two.button], [2, "Read 2 pages"]);
+    check("and the next joins it, and one can be taken out again",
+        [taken.two.thumbs, taken.two.button, taken.two.labels], [2, "Read 2 pages", ["Remove page 1", "Remove page 2"]]);
     check("Read sends them as one score", [taken.piece, taken.emptied], ["Twinkle — read by Gemini", true]);
     check("in the order they were taken", asked.at(-1).sizes, [[300, 200], [200, 300]]);
 
