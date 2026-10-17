@@ -25,6 +25,8 @@ const ui = {
     clearPages: document.getElementById("clear-pages"),
     rereadBar: document.getElementById("reread-bar"),
     rereadShaded: document.getElementById("reread-shaded"),
+    showPage: document.getElementById("show-page"),
+    original: document.getElementById("original"),
     instrument: document.getElementById("instrument"),
     status: document.getElementById("status"),
     controls: document.getElementById("controls"),
@@ -217,6 +219,35 @@ function forgetSource() {
     sourceFile = null;
     ui.rereadBar.hidden = true;
     ui.rereadShaded.hidden = true;
+    offerPage([]);
+}
+
+/**
+ * The pictures of the page a reading came from: its strips, which together
+ * are the pages, or the page itself. A PDF read whole has none to show.
+ */
+function pagePictures() {
+    if (sourceStrips.length) return sourceStrips;
+    return sourceFile?.type.startsWith("image/") ? [sourceFile] : [];
+}
+
+/** Shows the Show the page button for these pictures, with the page closed. */
+function offerPage(pictures) {
+    for (const img of ui.original.querySelectorAll("img")) URL.revokeObjectURL(img.src);
+    ui.original.replaceChildren(...pictures.map((picture, i) => {
+        const img = document.createElement("img");
+        img.src = URL.createObjectURL(picture);
+        img.alt = pictures.length > 1 ? `Part ${i + 1} of the page` : "The page";
+        return img;
+    }));
+    showingPage(false);
+    ui.showPage.hidden = pictures.length === 0;
+}
+
+function showingPage(open) {
+    ui.original.hidden = !open;
+    ui.showPage.textContent = open ? "Hide the page" : "Show the page";
+    ui.showPage.setAttribute("aria-expanded", String(open));
 }
 
 // The bar the player is on, for "Re-read bar N".
@@ -856,6 +887,7 @@ async function transcribe(originals) {
     ui.rereadBar.textContent = "Re-read bar 1";
     ui.rereadBar.hidden = false;
     shade(result.uneven);
+    offerPage(pagePictures());
     ui.pieceName.textContent = result.title
         ? `${result.title} — read by ${readerName}`
         : `Read by ${readerName}`;
@@ -978,6 +1010,7 @@ async function rereadBars(bars) {
 }
 
 ui.rereadBar.addEventListener("click", () => rereadBars([currentBar]));
+ui.showPage.addEventListener("click", () => showingPage(ui.original.hidden));
 ui.rereadShaded.addEventListener("click", () => rereadBars(shadedBars));
 
 /** Sends my answers back, so the reader can correct the MusicXML. */
