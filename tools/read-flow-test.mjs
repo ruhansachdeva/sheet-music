@@ -189,7 +189,10 @@ const server = spawn(process.execPath, ["server.js"], {
 });
 const browser = spawn(findChrome(), [
     "--headless=new", "--remote-debugging-port=0", "--disable-gpu",
-    `--user-data-dir=${mkdtempSync(join(tmpdir(), "read-flow-"))}`, "about:blank",
+    `--user-data-dir=${mkdtempSync(join(tmpdir(), "read-flow-"))}`,
+    // Anything a machine needs, such as --no-sandbox on a CI runner.
+    ...(process.env.CHROME_FLAGS ?? "").split(" ").filter(Boolean),
+    "about:blank",
 ], { stdio: ["ignore", "pipe", "pipe"] });
 
 const errors = [];
