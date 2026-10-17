@@ -739,20 +739,35 @@ async function transcribe(original) {
         : `Read by ${readerName}`;
     offerDownload(result.title);
     questionPanel.show(result.questions);
-    warnIfLighter(result);
+    warnAboutReading(result);
 }
 
-/** A lighter model misreads more, so its reading is worth checking by eye. */
-function warnIfLighter(result) {
-    if (!result.fallback) return;
-    const why = result.fallback === "limit"
-        ? "has hit its free-tier limit"
-        : "was too busy";
-    setStatus(
-        `${readerName}'s usual model ${why}, so a lighter one read this, and it ` +
-            "misreads more often. Check it against the page, or try again later.",
-        "info",
-    );
+/**
+ * What is worth checking by eye in a reading: anything a lighter model read,
+ * since it misreads more, and any bar still not adding up after the recheck,
+ * since its rhythm is certainly off.
+ */
+function warnAboutReading(result) {
+    const warnings = [];
+    if (result.fallback) {
+        const why = result.fallback === "limit"
+            ? "has hit its free-tier limit"
+            : "was too busy";
+        warnings.push(
+            `${readerName}'s usual model ${why}, so a lighter one read this, and it ` +
+                "misreads more often. Check it against the page, or try again later.",
+        );
+    }
+    const bars = result.uneven ?? [];
+    if (bars.length) {
+        const one = bars.length === 1;
+        const list = bars.length > 6 ? `${bars.slice(0, 5).join(", ")} and ${bars.length - 5} more` : bars.join(", ");
+        warnings.push(
+            `${one ? "Bar" : "Bars"} ${list} ${one ? "does" : "do"} not add up to the time signature, ` +
+                `so ${one ? "its" : "their"} rhythm is off. Check ${one ? "it" : "them"} against the page.`,
+        );
+    }
+    if (warnings.length) setStatus(warnings.join(" "), "info");
 }
 
 /** Sends my answers back, so the reader can correct the MusicXML. */
@@ -781,7 +796,7 @@ async function sendAnswers(answers) {
         ui.pieceName.textContent = `${result.title} — corrected`;
         offerDownload(result.title);
         questionPanel.show(result.questions);
-        warnIfLighter(result);
+        warnAboutReading(result);
     } catch (error) {
         setStatus(`Could not apply the answers: ${error.message}`, "error");
     } finally {

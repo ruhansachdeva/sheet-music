@@ -78,26 +78,33 @@ function generateHere(onProgress) {
 
 export function transcribe({ file, instrument, onProgress }) {
     const progress = withPlace(onProgress);
-    return read.transcribe(generateHere(progress), { file, instrument, onContinue: progress.after });
+    return read.transcribe(generateHere(progress), {
+        file, instrument, onContinue: progress.after, onRecheck: progress.recheck,
+    });
 }
 
 export function refine({ file, instrument, musicxml, answers, onProgress }) {
     const progress = withPlace(onProgress);
-    return read.refine(generateHere(progress), { file, instrument, musicxml, answers, onContinue: progress.after });
+    return read.refine(generateHere(progress), {
+        file, instrument, musicxml, answers, onContinue: progress.after, onRecheck: progress.recheck,
+    });
 }
 
 /**
- * The model's headings - with, once a dense page has taken more than one
- * answer, the bar it is carrying on after in front of them, so a reading
- * that is still going does not look like one that has started over.
+ * The model's headings - with, once a reading has gone past one answer, what
+ * the later answer is for in front of them: the bar a dense page is carrying
+ * on after, or the bars being looked at again. A reading that is still going
+ * should not look like one that has started over.
  */
 function withPlace(onProgress = () => {}) {
     let place = "";
     const progress = (heading) => onProgress(place ? `${place} · ${heading}` : heading);
-    progress.after = (bar) => {
-        place = `carrying on after bar ${bar}`;
+    const now = (what) => {
+        place = what;
         onProgress(place);
     };
+    progress.after = (bar) => now(`carrying on after bar ${bar}`);
+    progress.recheck = (bars) => now(`rechecking ${bars} bar${bars === 1 ? "" : "s"} that did not add up`);
     return progress;
 }
 
