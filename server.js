@@ -106,8 +106,8 @@ app.post("/api/refine", page, async (req, res, next) => {
 
 /** What the page is sent of a reading. */
 function reading(result) {
-    const { title, musicxml, questions, instrument, model, fallback, uneven } = result;
-    return { title, musicxml, questions, instrument, model, fallback, uneven };
+    const { title, musicxml, questions, instrument, model, fallback, uneven, missing } = result;
+    return { title, musicxml, questions, instrument, model, fallback, uneven, missing };
 }
 
 function logUsage(route, file, result) {

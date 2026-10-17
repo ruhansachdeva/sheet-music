@@ -828,6 +828,14 @@ function warnAboutReading(result) {
                 `so ${one ? "its" : "their"} rhythm is off. Check ${one ? "it" : "them"} against the page.`,
         );
     }
+    const gone = result.missing ?? [];
+    if (gone.length) {
+        const list = gone.length > 6 ? `${gone.slice(0, 5).join(", ")} and ${gone.length - 5} more` : gone.join(", ");
+        warnings.push(
+            `${gone.length === 1 ? "Bar" : "Bars"} ${list} could not be read, so ${gone.length === 1 ? "it is" : "they are"} ` +
+                "missing. Try again, or read that part of the page on its own.",
+        );
+    }
     if (warnings.length) setStatus(warnings.join(" "), "info");
 }
 
