@@ -121,6 +121,7 @@ Output a complete, valid MusicXML 3.1 \`score-partwise\` document:
 - Repeats as <barline> with <bar-style>, <repeat direction="forward"/> or <repeat direction="backward"/>, and endings as <ending> when the score shows them.
 - A measure-repeat sign - a slash between two dots filling the bar - means the bar before is played again: write that bar's notes out again in full, exactly the same.
 - Drums and other unpitched percussion: a <score-instrument> plus <midi-instrument> per kit piece, with <midi-channel>10</midi-channel> and the General MIDI <midi-unpitched> number (counting from 1, so the bass drum is 37), notes written as <unpitched> with <display-step> and <display-octave>, and an <instrument> reference on every note.
+- A drum staff is read by where each note sits, and its notehead. Unless the page has a legend saying otherwise, the usual layout is: bass drum in the bottom space (F4); snare in the third space (C5); toms at E5, D5 and B4, high to low, and floor tom at A4 or G4; hi-hat as an x just above the top line (G5), open when it has a small circle over it; ride as an x on the top line (F5); crash as an x on the ledger line above (A5); hi-hat pedal as an x below the staff (D4). Everything on one stem is hit together, one note each in a chord. A small slashed note just before another is a flam: a grace note.
 - Pitches at WRITTEN pitch, exactly as printed on the page. Do not transpose to concert pitch - the player handles that.
 - Dynamics, articulations and slurs where you can read them.
 
