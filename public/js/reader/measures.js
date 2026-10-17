@@ -106,3 +106,23 @@ export function checkMeasures(xml) {
 
     return { measures, notes, divisions, uneven };
 }
+
+/**
+ * Bars a reading has skipped: in each part, the numbers missing from the run
+ * that starts at 1 (or at a pickup bar 0) and goes up to the last bar. Only
+ * plain numbers count - "X1" and the like are left alone. Returns
+ * [{ part, numbers }], one entry per part that has any missing.
+ */
+export function missingMeasures(xml) {
+    const missing = [];
+    for (const [, part, body] of xml.matchAll(/<part\s[^>]*\bid="([^"]*)"[^>]*>([\s\S]*?)<\/part>/g)) {
+        const numbers = new Set(
+            [...body.matchAll(/<measure\s[^>]*\bnumber="(\d+)"/g)].map((m) => Number(m[1])),
+        );
+        if (!numbers.size) continue;
+        const gaps = [];
+        for (let n = 1; n < Math.max(...numbers); n++) if (!numbers.has(n)) gaps.push(n);
+        if (gaps.length) missing.push({ part, numbers: gaps });
+    }
+    return missing;
+}

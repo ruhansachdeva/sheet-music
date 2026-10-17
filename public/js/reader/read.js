@@ -4,7 +4,7 @@
 // back, so a reading is held to one standard wherever it was made.
 
 import { ReadError } from "./errors.js";
-import { checkMeasures } from "./measures.js";
+import { checkMeasures, missingMeasures } from "./measures.js";
 import {
     CONTINUATION_SCHEMA,
     RECHECK_SCHEMA,
@@ -12,6 +12,7 @@ import {
     SYSTEM_PROMPT,
     aboutStrips,
     userPromptForContinuing,
+    userPromptForMissing,
     userPromptForRecheck,
     userPromptForRefine,
     userPromptForTranscribe,
@@ -29,8 +30,8 @@ const MAX_CONTINUATIONS = 4;
  * `onContinue` hears the bar a reading picks up from, when it has to, and
  * `onRecheck` how many bars are being looked at again.
  */
-export async function transcribe(generate, { file, strips, instrument, onContinue, onRecheck }) {
-    const result = parseResult(
+export async function transcribe(generate, { file, strips, instrument, onContinue, onRecheck, onMissing }) {
+    const first = parseResult(
         await complete(generate, {
             system: SYSTEM_PROMPT,
             text: userPromptForTranscribe(instrument) + seen(strips),
@@ -39,12 +40,13 @@ export async function transcribe(generate, { file, strips, instrument, onContinu
             schema: RESPONSE_SCHEMA,
         }, onContinue),
     );
-    return recheck(generate, result, { file, strips, instrument, onRecheck });
+    const whole = await fillMissing(generate, first, { file, strips, instrument, onMissing });
+    return recheck(generate, whole, { file, strips, instrument, onRecheck });
 }
 
 /** Second pass: the same file, the MusicXML so far, and the answers. */
-export async function refine(generate, { file, strips, instrument, musicxml, answers, onContinue, onRecheck }) {
-    const result = parseResult(
+export async function refine(generate, { file, strips, instrument, musicxml, answers, onContinue, onRecheck, onMissing }) {
+    const corrected = parseResult(
         await complete(generate, {
             system: SYSTEM_PROMPT,
             text: userPromptForRefine(instrument, musicxml, answers) + seen(strips),
@@ -53,12 +55,77 @@ export async function refine(generate, { file, strips, instrument, musicxml, ans
             schema: RESPONSE_SCHEMA,
         }, onContinue),
     );
-    return recheck(generate, result, { file, strips, instrument, onRecheck });
+    const whole = await fillMissing(generate, corrected, { file, strips, instrument, onMissing });
+    return recheck(generate, whole, { file, strips, instrument, onRecheck });
 }
 
 /** What to say about how the page is sent: nothing, unless it is in strips. */
 function seen(strips) {
     return strips?.length ? aboutStrips(strips.length) : "";
+}
+
+/**
+ * Bars a reading skipped - a run of bar numbers missing, such as a whole
+ * strip of the page - are asked for, and each one put in its place. If that
+ * fails, the reading stands; the bars still missing are not hidden, since
+ * the score's numbering shows the gap.
+ */
+async function fillMissing(generate, result, { file, strips, instrument, onMissing = () => {} }) {
+    const missing = missingMeasures(result.musicxml);
+    if (!missing.length) return result;
+    const wanted = new Set(missing.flatMap(({ part, numbers }) => numbers.map((n) => `${part}\n${n}`)));
+    onMissing(wanted.size);
+
+    let musicxml = result.musicxml;
+    let usage = result.usage;
+    try {
+        const answer = await generate({
+            system: SYSTEM_PROMPT,
+            text: userPromptForMissing(instrument, musicxml, missing) + seen(strips),
+            file,
+            strips,
+            schema: RECHECK_SCHEMA,
+        });
+        usage = added(usage, answer.usage);
+        const measures = answer.incomplete ? [] : parseJson(answer.text)?.measures ?? [];
+        // In number order, so each lands after the ones before it.
+        const sorted = (Array.isArray(measures) ? measures : [])
+            .filter(({ part, number }) => wanted.has(`${part}\n${number}`))
+            .sort((a, b) => Number(a.number) - Number(b.number));
+        for (const { part, number, musicxml: measure } of sorted) {
+            musicxml = insertMeasure(musicxml, part, String(number), measure) ?? musicxml;
+        }
+    } catch {
+        // Kept as read.
+    }
+    return { ...result, musicxml, usage };
+}
+
+/**
+ * The score with a measure put into a part, before the first one numbered
+ * after it. A measure that becomes the part's first gets the <attributes> the
+ * old first one had, if it came without any. Null if it cannot go in.
+ */
+function insertMeasure(xml, part, number, measure) {
+    let fresh = String(measure ?? "").trim();
+    const opening = /^<measure\s[^>]*\bnumber="([^"]*)"[^>]*>/.exec(fresh);
+    if (!opening || opening[1] !== number || !fresh.endsWith("</measure>")) return null;
+
+    const partOpen = new RegExp(`<part\\s[^>]*\\bid="${escaped(part)}"[^>]*>`).exec(xml);
+    if (!partOpen) return null;
+    const bodyStart = partOpen.index + partOpen[0].length;
+    const bodyEnd = xml.indexOf("</part>", bodyStart);
+    if (bodyEnd < 0) return null;
+
+    const measures = [...xml.slice(bodyStart, bodyEnd).matchAll(/<measure\s[^>]*\bnumber="([^"]*)"[^>]*>/g)];
+    const next = measures.find((m) => Number(m[1]) > Number(number));
+    const at = next ? bodyStart + next.index : bodyEnd;
+
+    if (next === measures[0] && next && !fresh.includes("<attributes>")) {
+        const attributes = /<attributes>[\s\S]*?<\/attributes>/.exec(xml.slice(at, bodyEnd))?.[0];
+        if (attributes) fresh = fresh.replace(opening[0], opening[0] + attributes);
+    }
+    return xml.slice(0, at) + fresh + xml.slice(at);
 }
 
 /**
@@ -72,7 +139,7 @@ function seen(strips) {
  */
 async function recheck(generate, result, { file, strips, instrument, onRecheck = () => {} }) {
     const { uneven } = checkMeasures(result.musicxml);
-    if (!uneven.length) return { ...result, uneven: [] };
+    if (!uneven.length) return { ...result, uneven: [], missing: skipped(result.musicxml) };
 
     const key = (part, measure) => `${part}\n${measure}`;
     const asked = new Set(uneven.map((u) => key(u.part, u.measure)));
@@ -101,7 +168,12 @@ async function recheck(generate, result, { file, strips, instrument, onRecheck =
     }
 
     const still = checkMeasures(musicxml).uneven;
-    return { ...result, musicxml, usage, uneven: [...new Set(still.map((u) => u.measure))] };
+    return { ...result, musicxml, usage, uneven: [...new Set(still.map((u) => u.measure))], missing: skipped(musicxml) };
+}
+
+/** The bar numbers still missing from a score, in any part. */
+function skipped(xml) {
+    return [...new Set(missingMeasures(xml).flatMap(({ numbers }) => numbers))].sort((a, b) => a - b);
 }
 
 /**

@@ -43,6 +43,9 @@ jobs:
       - name: Check how a busy reader is handled
         run: npm run test:provider
 
+      - name: Check how a reading is put together and put right
+        run: npm run test:reader
+
       - name: Assemble the site
         run: |
           mkdir -p site

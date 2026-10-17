@@ -87,14 +87,15 @@ function generateHere(onProgress) {
 export function transcribe({ file, strips, instrument, onProgress }) {
     const progress = withPlace(onProgress);
     return read.transcribe(generateHere(progress), {
-        file, strips, instrument, onContinue: progress.after, onRecheck: progress.recheck,
+        file, strips, instrument, onContinue: progress.after, onRecheck: progress.recheck, onMissing: progress.missing,
     });
 }
 
 export function refine({ file, strips, instrument, musicxml, answers, onProgress }) {
     const progress = withPlace(onProgress);
     return read.refine(generateHere(progress), {
-        file, strips, instrument, musicxml, answers, onContinue: progress.after, onRecheck: progress.recheck,
+        file, strips, instrument, musicxml, answers,
+        onContinue: progress.after, onRecheck: progress.recheck, onMissing: progress.missing,
     });
 }
 
@@ -113,6 +114,7 @@ function withPlace(onProgress = () => {}) {
     };
     progress.after = (bar) => now(`carrying on after bar ${bar}`);
     progress.recheck = (bars) => now(`rechecking ${bars} bar${bars === 1 ? "" : "s"} that did not add up`);
+    progress.missing = (bars) => now(`reading ${bars} bar${bars === 1 ? "" : "s"} it skipped`);
     return progress;
 }
 
