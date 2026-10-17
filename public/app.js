@@ -7,7 +7,7 @@ import { PianoRoll } from "./js/midi.js";
 import { Player } from "./js/player.js";
 import { QuestionPanel } from "./js/questions.js";
 import { Editor } from "./js/editor/ui.js";
-import { cutIntoStrips, isSvg, preparePhoto } from "./js/photo.js";
+import { isSvg, preparePhoto, stripsOf } from "./js/photo.js";
 import * as ownKey from "./js/reader/browser.js";
 import { guessInstrument } from "./js/instrument-guess.js";
 
@@ -715,9 +715,9 @@ async function showPianoRoll(arrayBuffer, label) {
 /** A photo or a PDF: it is read into MusicXML, then rendered like any score. */
 async function transcribe(original) {
     questionPanel.hide();
-    setStatus("Preparing the photo…", "busy");
+    setStatus(original.type === "application/pdf" ? "Preparing the pages…" : "Preparing the photo…", "busy");
     const file = await preparePhoto(original);
-    const strips = await cutIntoStrips(file);
+    const strips = await stripsOf(file);
 
     const body = new FormData();
     body.append("file", file);

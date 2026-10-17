@@ -196,9 +196,9 @@ The current MusicXML:
 ${musicxml}`;
 }
 
-/** Said alongside a page sent as strips, so they are read as one page. */
+/** Said alongside music sent as strips, so they are read as one score. */
 export function aboutStrips(count) {
-    return `\n\nThe page comes as ${count} images, top to bottom: slices of one page, cut between systems so each can be seen in detail. Together they are the whole page, and the bars run on from one image to the next.`;
+    return `\n\nThe music comes as ${count} images, in reading order: slices cut between systems (and between pages, if it has several), so each can be seen in detail. Together they are the whole score, and the bars run on from one image to the next.`;
 }
 
 export function userPromptForRefine(instrument, musicxml, answers) {
