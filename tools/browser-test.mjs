@@ -291,6 +291,22 @@ async function run() {
             what: "the app to boot",
         });
 
+        // No fades or slides. Later in a run the headless tab stops drawing
+        // frames, and a transition then never finishes: an audit samples a
+        // button half way between two themes' colours, and a tap lands where
+        // the docked writer has not yet slid to. Checks are about where
+        // things end up, so they see the end state straight away - on this
+        // page, and on any it reloads to.
+        const still = `(() => {
+            const style = document.createElement("style");
+            style.textContent = "*, *::before, *::after { transition: none !important; animation: none !important; }";
+            (document.head ?? document.documentElement).append(style);
+        })()`;
+        await page.send("Page.addScriptToEvaluateOnNewDocument", {
+            source: `document.addEventListener("DOMContentLoaded", () => ${still});`,
+        });
+        await page.evaluate(still);
+
         // axe-core, the standard automated accessibility checker. The first
         // audit runs on the untouched first-run page: later sections change the
         // page enough that a contrast failure can go unseen mid-suite.
