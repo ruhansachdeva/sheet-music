@@ -423,6 +423,22 @@ try {
     const sentStrips = asked[stripCount];
     check("from strips, each in full detail", sentStrips.images.length > 1 && sentStrips.images.every((r) => r === "ultra_high"), true);
     check("said to be one page in that many slices", sentStrips.strips, String(sentStrips.images.length));
+    const original = await evaluate(`
+        const button = document.getElementById("show-page");
+        const panel = document.getElementById("original");
+        const before = { offered: !button.hidden, open: !panel.hidden };
+        button.click();
+        const pictures = [...panel.querySelectorAll("img")];
+        await Promise.all(pictures.map((img) => img.decode().catch(() => {})));
+        const opened = { open: !panel.hidden, pictures: pictures.length, drawn: pictures.every((img) => img.naturalWidth > 0), label: button.textContent, expanded: button.getAttribute("aria-expanded") };
+        button.click();
+        return { before, opened, closed: panel.hidden };
+    `);
+    check("the page it was read from is offered, closed", [original.before.offered, original.before.open], [true, false]);
+    check("and opens as the strips it was read from",
+        [original.opened.open, original.opened.pictures, original.opened.drawn, original.opened.label, original.opened.expanded],
+        [true, sentStrips.images.length, true, "Hide the page", "true"]);
+    check("and closes again", original.closed, true);
 
     console.log("\nseveral pages of one piece");
     const severalRead = await evaluate(`
