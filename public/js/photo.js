@@ -9,30 +9,42 @@
 // Decoding the image and drawing it onto a canvas fixes both: the browser
 // applies the orientation while decoding, and the canvas is drawn at the size
 // actually needed.
+//
+// A page exported from notation software may be an SVG instead. The model
+// cannot see a picture in SVG source - it gets hundreds of kilobytes of path
+// data - so that is drawn onto the canvas too, as the picture it describes.
 
 /** Long edge after scaling. Comfortably above what either provider keeps. */
 export const MAX_EDGE = 2400;
+
+/** CSS pixels per unit, for an SVG's width and height. */
+const UNITS = { "": 1, px: 1, pt: 4 / 3, pc: 16, in: 96, cm: 96 / 2.54, mm: 96 / 25.4 };
+
+export function isSvg(file) {
+    return file.type === "image/svg+xml" || /\.svg$/i.test(file.name ?? "");
+}
 
 /**
  * Returns a file ready to upload: upright, no larger than MAX_EDGE on its long
  * side, and in a format both providers accept. Anything that is not an image -
  * a PDF - comes back untouched, as does an image the browser cannot decode.
+ * An SVG that cannot be drawn is an error: sent as it is, it cannot be read.
  */
 export async function preparePhoto(file) {
-    if (!file.type.startsWith("image/")) return file;
+    const svg = isSvg(file);
+    if (!svg && !file.type.startsWith("image/")) return file;
 
-    let bitmap;
-    try {
-        bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-    } catch {
-        // Some browsers cannot decode some formats (HEIC outside Safari).
-        // Send the original and let the server have a go.
+    const picture = svg ? await svgPicture(file) : await bitmap(file);
+    if (!picture) {
+        if (svg) throw new Error(`Could not draw ${file.name}. Save the page as a PNG or PDF and try that.`);
         return file;
     }
 
-    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-    const width = Math.round(bitmap.width * scale);
-    const height = Math.round(bitmap.height * scale);
+    // A drawing has no pixels of its own, so it is drawn at the full size.
+    const scale = svg ? MAX_EDGE / Math.max(picture.width, picture.height)
+        : Math.min(1, MAX_EDGE / Math.max(picture.width, picture.height));
+    const width = Math.round(picture.width * scale);
+    const height = Math.round(picture.height * scale);
 
     const canvas = document.createElement("canvas");
     canvas.width = width;
@@ -41,16 +53,73 @@ export async function preparePhoto(file) {
     // Paper is white: fill first so a transparent PNG does not turn black.
     context.fillStyle = "#fff";
     context.fillRect(0, 0, width, height);
-    context.drawImage(bitmap, 0, 0, width, height);
-    bitmap.close?.();
+    context.drawImage(picture, 0, 0, width, height);
+    picture.close?.();
 
-    // A screenshot or scan is crisp line art, which JPEG would smear; keep
-    // those as PNG. A photo is what JPEG is for.
-    const keepPng = file.type === "image/png";
+    // A screenshot, scan or drawing is crisp line art, which JPEG would smear;
+    // keep those as PNG. A photo is what JPEG is for.
+    const keepPng = svg || file.type === "image/png";
     const type = keepPng ? "image/png" : "image/jpeg";
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, type, 0.92));
     if (!blob) return file;
 
     const name = file.name.replace(/\.[^.]+$/, "") + (keepPng ? ".png" : ".jpg");
     return new File([blob], name, { type });
+}
+
+async function bitmap(file) {
+    try {
+        return await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch {
+        // Some browsers cannot decode some formats (HEIC outside Safari).
+        // Send the original and let the server have a go.
+        return null;
+    }
+}
+
+/**
+ * An SVG as an <img>, which every browser can draw - createImageBitmap cannot
+ * decode SVG in Chrome. It is given its pixel size up front, so it is rendered
+ * crisp at that size rather than drawn small and scaled up. Null if the file
+ * is not an SVG the browser can draw.
+ */
+async function svgPicture(file) {
+    let root;
+    try {
+        root = new DOMParser().parseFromString(await file.text(), "image/svg+xml").documentElement;
+    } catch {
+        return null;
+    }
+    if (root.localName !== "svg" || root.getElementsByTagName("parsererror").length) return null;
+
+    // Its size: width and height where they are given in absolute units, else
+    // the viewBox. Without a viewBox the drawing would not scale, so it gets one.
+    const box = root.getAttribute("viewBox")?.trim().split(/[\s,]+/).map(Number);
+    const width = length(root.getAttribute("width")) || box?.[2];
+    const height = length(root.getAttribute("height")) || box?.[3];
+    if (!(width > 0 && height > 0)) return null;
+    if (!box) root.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+    const scale = MAX_EDGE / Math.max(width, height);
+    root.setAttribute("width", String(Math.round(width * scale)));
+    root.setAttribute("height", String(Math.round(height * scale)));
+
+    const source = new Blob([new XMLSerializer().serializeToString(root)], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(source);
+    try {
+        const image = new Image();
+        image.src = url;
+        await image.decode();
+        return image;
+    } catch {
+        return null;
+    } finally {
+        URL.revokeObjectURL(url);
+    }
+}
+
+/** An SVG length in CSS pixels, or 0 for a relative one such as "100%". */
+function length(value) {
+    const match = /^\s*([\d.]+)\s*(px|pt|pc|in|cm|mm)?\s*$/.exec(value ?? "");
+    return match ? Number(match[1]) * UNITS[match[2] ?? ""] : 0;
 }

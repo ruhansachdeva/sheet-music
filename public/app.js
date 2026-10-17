@@ -7,7 +7,7 @@ import { PianoRoll } from "./js/midi.js";
 import { Player } from "./js/player.js";
 import { QuestionPanel } from "./js/questions.js";
 import { Editor } from "./js/editor/ui.js";
-import { preparePhoto } from "./js/photo.js";
+import { isSvg, preparePhoto } from "./js/photo.js";
 import * as ownKey from "./js/reader/browser.js";
 import { guessInstrument } from "./js/instrument-guess.js";
 
@@ -569,7 +569,7 @@ async function loadFile(file) {
             await showScore(await file.text(), file.name);
         } else if (name.endsWith(".mid") || name.endsWith(".midi")) {
             await showPianoRoll(await file.arrayBuffer(), file.name);
-        } else if (file.type.startsWith("image/") || file.type === "application/pdf") {
+        } else if (file.type.startsWith("image/") || file.type === "application/pdf" || isSvg(file)) {
             if (!canRead) {
                 setStatus(`${noReaderText} Save a Gemini key above to read ${file.name} here.`, "error");
                 return;

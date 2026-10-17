@@ -1544,6 +1544,32 @@ async function run() {
             // 3. A PDF is left alone.
             const pdf = new File(["%PDF-1.4"], "page.pdf", { type: "application/pdf" });
 
+            // 4. A page saved as SVG, the way notation software exports one:
+            //    sized in points, no viewBox, the left half black. It has to
+            //    become a picture - SVG source is not something a model sees.
+            const svg = new File([
+                '<svg xmlns="http://www.w3.org/2000/svg" width="595.44" height="841.68">' +
+                '<rect width="297.72" height="841.68"/></svg>',
+            ], "page.svg", { type: "image/svg+xml" });
+            const drawn = await preparePhoto(svg);
+            const pixel = async (file, x, y) => {
+                const b = await createImageBitmap(file);
+                const c = document.createElement("canvas");
+                c.width = b.width; c.height = b.height;
+                const g = c.getContext("2d");
+                g.drawImage(b, 0, 0);
+                return g.getImageData(x * b.width, y * b.height, 1, 1).data[0];
+            };
+            // Some phones leave a file's type blank.
+            const untyped = await preparePhoto(new File([await svg.text()], "page.svg", { type: "" }));
+            let broken;
+            try {
+                await preparePhoto(new File(["<svg"], "broken.svg", { type: "image/svg+xml" }));
+                broken = "no error";
+            } catch (error) {
+                broken = error.message;
+            }
+
             return {
                 bigIn: await size(big),
                 bigOut: await size(prepared),
@@ -1552,6 +1578,13 @@ async function run() {
                 maxEdge: MAX_EDGE,
                 sidewaysOut: await size(upright),
                 pdfUntouched: (await preparePhoto(pdf)) === pdf,
+                svgType: drawn.type,
+                svgName: drawn.name,
+                svgOut: await size(drawn),
+                svgLeft: await pixel(drawn, 0.25, 0.5),
+                svgRight: await pixel(drawn, 0.75, 0.5),
+                untypedType: untyped.type,
+                broken,
             };
         `);
         check("a phone-sized photo is scaled to the long edge", Math.max(...photo.bigOut), photo.maxEdge);
@@ -1561,6 +1594,12 @@ async function run() {
         // 400 x 200 with "rotate 90" applied comes out 200 x 400.
         check("a sideways photo is turned upright", photo.sidewaysOut, [200, 400]);
         check("a PDF is left alone", photo.pdfUntouched, true);
+        check("an SVG page is drawn as a PNG", [photo.svgType, photo.svgName], ["image/png", "page.png"]);
+        check("at the full reading size", Math.max(...photo.svgOut), photo.maxEdge);
+        check("keeping its shape", photo.svgOut[0] / photo.svgOut[1], 595.44 / 841.68, 0.01);
+        check("with the drawing scaled to fill it", [photo.svgLeft, photo.svgRight], [0, 255]);
+        check("an SVG with no type is drawn too", photo.untypedType, "image/png");
+        check("an SVG that cannot be drawn says so", /Could not draw broken\.svg/.test(photo.broken), true);
 
         // --- the clarifying question panel ----------------------------------
         console.log("\nclarifying questions");
