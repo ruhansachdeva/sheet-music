@@ -798,17 +798,48 @@ body.dropping #setup {
 
 .pages-thumbs {
     display: flex;
-    gap: var(--s2);
+    gap: var(--s3);
     overflow-x: auto;
+    /* Room for each page's remove button, which sits over its corner. */
+    padding: 10px 10px 0 0;
+}
+
+.page-taken {
+    position: relative;
+    flex: none;
+    margin: 0;
 }
 
 .pages-thumbs img {
+    display: block;
     height: 72px;
     width: auto;
-    flex: none;
     border: 1px solid var(--line-strong);
     border-radius: 6px;
     background: var(--surface);
+}
+
+/* Small on the thumbnail, but a full-size target to tap. */
+.page-remove {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    width: 28px;
+    height: 28px;
+    min-height: 0;
+    padding: 0;
+    border-radius: 50%;
+    font-size: var(--text-base);
+    line-height: 1;
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line-strong);
+}
+
+.page-remove::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
 }
 
 .pages-count {

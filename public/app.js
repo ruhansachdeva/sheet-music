@@ -439,10 +439,23 @@ const pagesTaken = [];
 function showPagesTaken() {
     for (const thumb of ui.pagesThumbs.querySelectorAll("img")) URL.revokeObjectURL(thumb.src);
     ui.pagesThumbs.replaceChildren(...pagesTaken.map((photo, i) => {
+        const page = document.createElement("figure");
+        page.className = "page-taken";
         const thumb = document.createElement("img");
         thumb.src = URL.createObjectURL(photo);
         thumb.alt = `Page ${i + 1}`;
-        return thumb;
+        // A blurry or crooked shot goes on its own, not with the rest.
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "page-remove";
+        remove.textContent = "×";
+        remove.setAttribute("aria-label", `Remove page ${i + 1}`);
+        remove.addEventListener("click", () => {
+            pagesTaken.splice(i, 1);
+            showPagesTaken();
+        });
+        page.append(thumb, remove);
+        return page;
     }));
     const count = pagesTaken.length;
     ui.pagesCount.textContent = count === 1
