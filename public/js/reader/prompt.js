@@ -239,6 +239,24 @@ The MusicXML so far:
 ${musicxml}`;
 }
 
+/**
+ * Looking again at bars the player says were read wrong. `numbers` are the
+ * bar numbers, as strings.
+ */
+export function userPromptForReread(instrument, musicxml, numbers) {
+    const one = numbers.length === 1;
+    const which = one ? `measure ${numbers[0]}` : `measures ${numbers.join(", ")}`;
+    return `Here is the MusicXML you produced for this sheet music (instrument: ${instrument}). Playing it back, I found ${which} read wrong.
+
+Look at ${one ? "that measure" : "those measures"} on the page again - find ${one ? "it" : "them"} by the bar numbers printed at the start of each system - and read note by note: each notehead's line or space and its shape (an x is a different note from a round head), every note stacked on a stem, accidentals, dots, ties, rests and tuplets. Do not assume your first reading was right; it was not.
+
+Write each as its whole corrected <measure> element, in the same compact style, with its part id and number, keeping its attributes, directions and barlines. Return only ${one ? "this measure" : "these measures"}, in every part that has ${one ? "it" : "them"}.
+
+The current MusicXML:
+
+${musicxml}`;
+}
+
 export function userPromptForRefine(instrument, musicxml, answers) {
     const answerLines = answers
         .map((a) => `- ${a.question}\n  My answer: ${a.answer}`)

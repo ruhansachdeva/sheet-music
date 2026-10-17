@@ -14,6 +14,7 @@ import {
     userPromptForContinuing,
     userPromptForMissing,
     userPromptForRecheck,
+    userPromptForReread,
     userPromptForRefine,
     userPromptForTranscribe,
 } from "./prompt.js";
@@ -62,6 +63,56 @@ export async function refine(generate, { file, strips, instrument, musicxml, ans
 /** What to say about how the page is sent: nothing, unless it is in strips. */
 function seen(strips) {
     return strips?.length ? aboutStrips(strips.length) : "";
+}
+
+/**
+ * Looks again at bars the player says were read wrong - bars can add up and
+ * still be wrong - and puts each corrected bar in place. One that would make
+ * any bar stop adding up is left out. Returns the score and which bars
+ * changed; the model may also find a bar was right.
+ */
+export async function reread(generate, { file, strips, instrument, musicxml, bars }) {
+    const numbers = [...new Set((bars ?? []).map(String))];
+    if (!numbers.length) throw new ReadError("No bars to read again.", 400);
+
+    const answer = await generate({
+        system: SYSTEM_PROMPT,
+        text: userPromptForReread(instrument, musicxml, numbers) + seen(strips),
+        file,
+        strips,
+        schema: RECHECK_SCHEMA,
+    });
+    if (answer.incomplete) {
+        throw new ReadError("The answer ran out of room. Try fewer bars at once.", 413);
+    }
+    const measures = parseJson(answer.text)?.measures;
+    if (!Array.isArray(measures)) throw new ReadError("The model's response was not valid JSON.", 502);
+
+    let score = musicxml;
+    const changed = [];
+    for (const { part, number, musicxml: measure } of measures) {
+        const n = String(number);
+        if (!numbers.includes(n)) continue;
+        const replaced = replaceMeasure(score, part, n, measure);
+        if (!replaced || replaced === score || !noNewUneven(replaced, score)) continue;
+        score = replaced;
+        if (!changed.includes(n)) changed.push(n);
+    }
+    return {
+        musicxml: score,
+        changed,
+        uneven: [...new Set(checkMeasures(score).uneven.map((u) => u.measure))],
+        model: answer.model,
+        fallback: answer.fallback || false,
+        usage: answer.usage,
+    };
+}
+
+/** Whether every bar that added up before still does. */
+function noNewUneven(after, before) {
+    const off = (xml) => new Set(checkMeasures(xml).uneven.map((u) => `${u.part}\n${u.measure}`));
+    const was = off(before);
+    return [...off(after)].every((bar) => was.has(bar));
 }
 
 /**
