@@ -125,6 +125,11 @@ const reader = createServer(async (request, response) => {
         key,
         withImage: input.some((item) => item.type === "image"),
         images: input.filter((item) => item.type === "image").map((item) => item.resolution ?? "default"),
+        // Each PNG's width and height, from its header, to tell pages apart.
+        sizes: input.filter((item) => item.type === "image" && item.mime_type === "image/png").map((item) => {
+            const png = Buffer.from(item.data, "base64");
+            return [png.readUInt32BE(16), png.readUInt32BE(20)];
+        }),
         strips: /comes as (\d+) images/.exec(text)?.[1] ?? null,
         answer: /My answer: (.*)/.exec(text)?.[1] ?? null,
     });
@@ -426,6 +431,44 @@ try {
     const both = asked.at(-1);
     check("are read together, into one score", [severalRead, asked.length - stripCount], ["Twinkle — read by Gemini", 2]);
     check("in one request with both pages, said to be in order", [both.images.length, both.strips], [2, "2"]);
+
+    console.log("\nphotos taken page by page");
+    const taken = await evaluate(`
+        const photo = async (w, h) => {
+            const c = document.createElement("canvas");
+            c.width = w; c.height = h;
+            const g = c.getContext("2d");
+            g.fillStyle = "#fff"; g.fillRect(0, 0, w, h);
+            return new File([await new Promise((r) => c.toBlob(r, "image/png"))], "image.png", { type: "image/png" });
+        };
+        const camera = document.getElementById("camera");
+        const take = async (file) => {
+            const files = new DataTransfer();
+            files.items.add(file);
+            camera.files = files.files;
+            camera.dispatchEvent(new Event("change", { bubbles: true }));
+            await new Promise((r) => setTimeout(r, 100));
+        };
+        const tray = document.getElementById("pages-taken");
+        const before = window.sheetMusic.timeline;
+        await take(await photo(300, 200));
+        const one = { shown: !tray.hidden, said: document.getElementById("pages-count").textContent };
+        await take(await photo(200, 300));
+        const two = {
+            thumbs: tray.querySelectorAll("img").length,
+            button: document.getElementById("read-pages").textContent,
+        };
+        document.getElementById("read-pages").click();
+        const status = document.getElementById("status");
+        for (let i = 0; i < 200 && window.sheetMusic.timeline === before && !status.classList.contains("error"); i++) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        return { one, two, emptied: tray.hidden, piece: document.getElementById("piece-name").textContent };
+    `);
+    check("a photo waits in the tray", [taken.one.shown, /1 page/.test(taken.one.said)], [true, true]);
+    check("and the next joins it", [taken.two.thumbs, taken.two.button], [2, "Read 2 pages"]);
+    check("Read sends them as one score", [taken.piece, taken.emptied], ["Twinkle — read by Gemini", true]);
+    check("in the order they were taken", asked.at(-1).sizes, [[300, 200], [200, 300]]);
 
     behaviour = "long";
     carriedOn = [];
