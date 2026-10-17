@@ -77,11 +77,28 @@ function generateHere(onProgress) {
 }
 
 export function transcribe({ file, instrument, onProgress }) {
-    return read.transcribe(generateHere(onProgress), { file, instrument });
+    const progress = withPlace(onProgress);
+    return read.transcribe(generateHere(progress), { file, instrument, onContinue: progress.after });
 }
 
 export function refine({ file, instrument, musicxml, answers, onProgress }) {
-    return read.refine(generateHere(onProgress), { file, instrument, musicxml, answers });
+    const progress = withPlace(onProgress);
+    return read.refine(generateHere(progress), { file, instrument, musicxml, answers, onContinue: progress.after });
+}
+
+/**
+ * The model's headings - with, once a dense page has taken more than one
+ * answer, the bar it is carrying on after in front of them, so a reading
+ * that is still going does not look like one that has started over.
+ */
+function withPlace(onProgress = () => {}) {
+    let place = "";
+    const progress = (heading) => onProgress(place ? `${place} · ${heading}` : heading);
+    progress.after = (bar) => {
+        place = `carrying on after bar ${bar}`;
+        onProgress(place);
+    };
+    return progress;
 }
 
 function base64(blob) {
