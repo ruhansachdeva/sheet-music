@@ -208,12 +208,15 @@
             <!-- On a reading: the bar the player is on, read again. See app.js. -->
             <button type="button" id="reread-bar" class="download" hidden>Re-read bar 1</button>
             <button type="button" id="reread-shaded" class="download" hidden>Re-read the shaded bars</button>
+            <button type="button" id="show-page" class="download" aria-expanded="false" aria-controls="original" hidden>Show the page</button>
         </p>
         <!-- Hidden with the attribute, not with CSS: OSMD measures this
              container to lay the score out, and a display:none container
              would make it render zero pixels wide. -->
         <!-- Focusable so a keyboard can scroll it when the engraving is wider
              than the card: the SVG inside has nothing that takes focus. -->
+        <!-- The page a reading came from, to check it against. See app.js. -->
+        <section id="original" class="original" hidden tabindex="0" role="region" aria-label="The page it was read from"></section>
         <section id="score" class="score" hidden tabindex="0" role="region" aria-label="Score"></section>
         <section id="roll" class="roll" hidden tabindex="0" role="region" aria-label="Piano roll"></section>
     </main>

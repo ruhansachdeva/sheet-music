@@ -539,6 +539,24 @@ html:has(body.has-transport) {
     stroke: var(--lit);
 }
 
+/* The page a reading came from, above the score to compare against. Tall
+   pages scroll inside it, so the score stays near. */
+.original {
+    max-height: 60vh;
+    overflow: auto;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--s2);
+    margin-bottom: var(--s3);
+}
+
+.original img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
 /* A bar a reading got wrong. The score is always on white paper, so this is
    the light theme's warning colour in dark mode too. */
 .bar-mark {
