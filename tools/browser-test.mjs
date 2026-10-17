@@ -1823,6 +1823,31 @@ async function run() {
             document.querySelector(".editor-head .primary").click();
         `);
 
+        // The camera tray with photos in it, and a score with a bar shaded:
+        // both arrived after the audits above were written.
+        const trayAndMarks = () => page.evaluate(`
+            await window.sheetMusic.loadSample("twinkle.musicxml");
+            window.sheetMusic.score.markBars([2]);
+            const camera = document.getElementById("camera");
+            for (let i = 0; i < 2; i++) {
+                const c = document.createElement("canvas");
+                c.width = 120; c.height = 160;
+                const g = c.getContext("2d");
+                g.fillStyle = "#fff"; g.fillRect(0, 0, 120, 160);
+                const files = new DataTransfer();
+                files.items.add(new File([await new Promise((r) => c.toBlob(r, "image/png"))], "page.png", { type: "image/png" }));
+                camera.files = files.files;
+                camera.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+            document.getElementById("setup-wrap").open = true;
+            await new Promise((r) => setTimeout(r, 200));
+            return !document.getElementById("pages-taken").hidden && document.querySelectorAll(".bar-mark").length;
+        `);
+        const clearTray = () => page.evaluate(`document.getElementById("clear-pages").click();`);
+        check("the tray and a shaded bar are on screen", await trayAndMarks(), 1);
+        check("no violations with photos in the tray and a bar shaded", await auditNow(), []);
+        await clearTray();
+
         // --- dark mode -------------------------------------------------------
         // Everything above runs in the light theme; the dark one gets its own
         // audit, and the two things that went wrong in it before.
@@ -1830,6 +1855,9 @@ async function run() {
         await scheme("dark");
         await loadSample(page, "twinkle.musicxml");
         check("no violations with a score loaded", await auditNow(), []);
+        await trayAndMarks();
+        check("nor with photos in the tray and a bar shaded", await auditNow(), []);
+        await clearTray();
         const dark = await page.evaluate(`
             document.getElementById("write-music").click();
             await new Promise((r) => setTimeout(r, 400));
