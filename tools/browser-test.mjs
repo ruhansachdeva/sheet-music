@@ -1641,6 +1641,31 @@ async function run() {
         check("a single system is read whole", cut.one, 0);
         check("so is a page with no music, and a PDF", [cut.blank, cut.pdf], [0, 0]);
 
+        console.log("\nreading a PDF from its pages");
+        const pdfBytes = readFileSync(join(ROOT, "tools/fixtures/systems.pdf")).toString("base64");
+        const pdf = await page.evaluate(`
+            const { pdfPages, stripsOf, MAX_EDGE } = await import("./js/photo.js");
+            const bytes = Uint8Array.from(atob("${pdfBytes}"), (c) => c.charCodeAt(0));
+            // Six systems on the first page, three on the second.
+            const file = new File([bytes], "systems.pdf", { type: "application/pdf" });
+            const size = async (f) => { const b = await createImageBitmap(f); return [b.width, b.height]; };
+            const pages = await pdfPages(file);
+            const strips = await stripsOf(file);
+            return {
+                pages: await Promise.all(pages.map(size)),
+                names: pages.map((p) => p.name),
+                maxEdge: MAX_EDGE,
+                strips: strips.length,
+                stripNames: strips.map((s) => s.name),
+                broken: (await stripsOf(new File(["%PDF-1.4 not really"], "broken.pdf", { type: "application/pdf" }))).length,
+            };
+        `);
+        check("each page of a PDF is drawn", pdf.names, ["systems-page-1.png", "systems-page-2.png"]);
+        check("at the full reading size", pdf.pages.map((p) => Math.max(...p)), [pdf.maxEdge, pdf.maxEdge]);
+        check("and cut into strips, page by page, in order",
+            pdf.strips > 2 && pdf.stripNames[0] === "systems-page-1-1.png" && pdf.stripNames.at(-1).startsWith("systems-page-2"), true);
+        check("a PDF that will not open is sent as it is", pdf.broken, 0);
+
         // --- the clarifying question panel ----------------------------------
         console.log("\nclarifying questions");
         const asked = await page.evaluate(`
