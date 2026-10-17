@@ -15,8 +15,10 @@ a metronome, and the current note lit up on the score.
 
 - **MusicXML** (`.musicxml`, `.xml`, `.mxl`) and **MIDI** (`.mid`, `.midi`) load
   straight in the browser.
-- **Photos and PDFs** are read into MusicXML for you, with a question asked when
-  something on the page is genuinely ambiguous.
+- **Photos, scans, SVG pages and PDFs** are read into MusicXML for you, with a
+  question asked when something on the page is genuinely ambiguous. Choose
+  several photos at once - each page of a piece - and they are read together
+  into one score.
 - **Take a photo** on a phone: the camera button opens the rear camera, so you
   can point it at a page and have it played back.
 - **Write it yourself**: a note writer with a piano keyboard, note values, rests,
@@ -215,6 +217,7 @@ npm test                 # drives the app in headless Chrome
 npm run test:audio       # also plays, and watches the audio clock and cursor
 npm run test:editor      # the note writer's model and MusicXML output
 npm run test:provider    # how a busy Gemini is handled, against a local fake
+npm run test:reader      # how a reading is joined, checked and put right, with fake answers
 npm run test:read-flow   # photo -> reading -> question -> answer, against a local fake,
                          # through the server and on the hosted copy with your own key
 npm run test:transcribe  # end to end through the model - needs a key
@@ -255,9 +258,14 @@ Gemini's free tier this costs nothing to run.
 
 ```text
 server.js            Express: POST /api/transcribe, POST /api/refine
-lib/transcriber.js   picks a provider, validates what comes back
-lib/prompt.js        the prompt and response schema, shared by both providers
+lib/transcriber.js   picks a provider and runs the reading through it
 lib/providers/       one file per provider: gemini.js, claude.js
+public/js/reader/    reading a page, shared by the server and the hosted page:
+                     prompt.js, read.js (carrying on, filling, rechecking),
+                     measures.js (the bar checks), gemini.js (the client)
+public/js/photo.js   gets a photo, SVG or PDF ready, and cuts it into strips
+public/js/strips.js  where a page can be cut: the blank paper between systems
+public/js/wake.js    keeps a phone's screen on while a reading runs
 public/app.js        picks a loader for the file, wires up the controls
 public/js/score.js   renders MusicXML, reads a timeline out of it
 public/js/midi.js    parses MIDI, draws the piano roll
@@ -292,16 +300,34 @@ main thread is busy. Nothing is played by `setTimeout`. The highlighting runs of
 `requestAnimationFrame` and reads the same audio clock, so what you see and what
 you hear stay together.
 
-**Reading a photo.** The image or PDF goes to whichever provider is configured,
-with a strict JSON schema for the response. Claude gets adaptive thinking and
-`effort: "high"`, streamed because a full score of MusicXML is long, with
-server-side refusal fallbacks on; Gemini gets `thinking_level: "high"` over its
-REST Interactions API, which takes PDFs natively so a scan never has to be
-rendered to images. The prompt asks for complete MusicXML 3.1
-at written pitch, and is strict about the thing that breaks playback most often:
-every measure's durations have to add up to the time signature. Questions are
-asked only when a reading is genuinely ambiguous and the answer changes the notes
-or the timing.
+**Reading a photo.** The page gets the picture ready before it leaves the
+phone: turned upright, scaled to 2400 px, an SVG drawn as a PNG, and each page
+of a PDF (up to eight) drawn with pdf.js. Then it is **cut into strips** between
+its systems, where the paper is blank. A model sees an image through a fixed
+number of tokens however big it is, so a dense page sent whole is squeezed
+until noteheads and dots blur: on a page of sixteenth-note drums, reading it
+whole got about a third of the hits right; in strips of a system or two, each
+sent at full resolution, about three in four. The strips all go in one request.
+
+The reader gets a strict JSON schema for its answer and is asked for complete,
+compact MusicXML 3.1 at written pitch - no layout the player redoes itself, so
+a full page fits in one answer. Claude gets adaptive thinking and
+`effort: "high"`; Gemini gets `thinking_level: "medium"` over its REST
+Interactions API. Then the reading is put together and checked, in
+`public/js/reader/read.js`:
+
+- **Out of room:** if the answer is cut off, every finished bar is kept and the
+  model carries on from the next one, up to four times.
+- **Skipped bars:** bar numbers have to run 1, 2, 3…; any missing are asked for
+  by number and put in their place.
+- **Bars that don't add up:** every voice of every bar is checked against the
+  time signature, and those that are off go back to the model with what they
+  total and need. A corrected bar goes in only if it now adds up without
+  upsetting another.
+
+Anything still wrong is named on screen, so you know which bars to check.
+Questions are asked only when a reading is genuinely ambiguous and the answer
+changes the notes or the timing.
 
 Libraries come from jsDelivr, so there is no build step:
 [opensheetmusicdisplay](https://opensheetmusicdisplay.org/) 2.2.1 for the score
@@ -323,11 +349,14 @@ the same prompts, client and checks the server uses, from `public/js/reader/`.
 **Forget it** removes the key. Since it lives in the browser, use it on your own
 devices, not shared ones.
 
-Reads are streamed. One takes one to four minutes, and a phone's browser drops a
-request that stays silent for about a minute, so the model streams summaries of
-its thinking as it goes: data arrives every few seconds, and the status line
-shows what it is working on ("Defining the Measure Structure"). Requests are
-sent with `store: false`, so Google keeps nothing once the read is done.
+Reads are streamed. One takes one to four minutes - a dense page more - and a
+phone's browser drops a request that stays silent for about a minute, so the
+model streams summaries of its thinking as it goes: data arrives every few
+seconds, and the status line shows what it is working on ("Defining the Measure
+Structure"), and when it is carrying on, filling skipped bars or rechecking.
+The screen is kept on while it reads, since a locked phone suspends the page
+and would drop the reading. Requests are sent with `store: false`, so Google
+keeps nothing once the read is done.
 
 ## On a phone
 
@@ -340,8 +369,11 @@ both of them overflowed a small screen.
 
 ## Known limits
 
-- One file at a time, so a multi-page PDF works but several photos of one piece
-  do not; upload them one page at a time.
+- Up to 12 photos, or a PDF of up to eight pages, are read in strips; a longer
+  PDF is sent whole, and reads less accurately.
+- Drum noteheads are sometimes put on the wrong line even in strips - the
+  sound is usually right, the exact cymbal less so. Check a reading against
+  the page.
 - Instrument samples download on first use, so the first Play after switching
   instrument can wait a moment.
 - Gemini's free tier is rate limited to a few requests a minute with a daily
