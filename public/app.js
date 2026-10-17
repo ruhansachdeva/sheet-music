@@ -23,6 +23,7 @@ const ui = {
     readPages: document.getElementById("read-pages"),
     addPage: document.getElementById("add-page"),
     clearPages: document.getElementById("clear-pages"),
+    rereadBar: document.getElementById("reread-bar"),
     instrument: document.getElementById("instrument"),
     status: document.getElementById("status"),
     controls: document.getElementById("controls"),
@@ -177,7 +178,7 @@ function loadDraft(kind) {
 async function showWrittenScore() {
     saveDraft(editor.score);
     player.stop();
-    sourceFile = null;
+    forgetSource();
     questionPanel.hide();
     try {
         await showScore(editor.toMusicXml(), editor.score.title, { written: true });
@@ -209,6 +210,15 @@ let lastInfo = "";
 
 /** The photo or PDF behind the current score, kept so answers can be applied to it. */
 let sourceFile = null;
+
+/** The score on screen is no longer a reading of a page. */
+function forgetSource() {
+    sourceFile = null;
+    ui.rereadBar.hidden = true;
+}
+
+// The bar the player is on, for "Re-read bar N".
+let currentBar = 1;
 // The same page cut into strips between its systems, if it would cut.
 let sourceStrips = [];
 
@@ -642,13 +652,13 @@ async function loadFile(file) {
 
     try {
         if (name.endsWith(".mxl")) {
-            sourceFile = null;
+            forgetSource();
             questionPanel.hide();
             // Unzipped to text here rather than by OSMD, so a .mxl file has
             // MusicXML to download and a tempo map like any other score.
             await showScore(await opensheetmusicdisplay.MXLHelper.MXLtoXMLstring(file), file.name);
         } else if (name.endsWith(".musicxml") || name.endsWith(".xml")) {
-            sourceFile = null;
+            forgetSource();
             questionPanel.hide();
             await showScore(await file.text(), file.name);
         } else if (name.endsWith(".mid") || name.endsWith(".midi")) {
@@ -671,7 +681,7 @@ async function loadFile(file) {
 async function loadSample(name) {
     player.stop();
     setStatus(`Loading ${name}…`, "busy");
-    sourceFile = null;
+    forgetSource();
     questionPanel.hide();
 
     try {
@@ -781,7 +791,7 @@ function transposeNote(semitones) {
 async function showPianoRoll(arrayBuffer, label) {
     setStatus("Reading the MIDI file…", "busy");
     showingSomethingElse();
-    sourceFile = null;
+    forgetSource();
     questionPanel.hide();
 
     ui.score.hidden = true;
@@ -841,6 +851,9 @@ async function transcribe(originals) {
     score.markBars(result.uneven);
     sourceFile = file;
     sourceStrips = strips;
+    currentBar = 1;
+    ui.rereadBar.textContent = "Re-read bar 1";
+    ui.rereadBar.hidden = false;
     ui.pieceName.textContent = result.title
         ? `${result.title} — read by ${readerName}`
         : `Read by ${readerName}`;
@@ -885,6 +898,62 @@ function warnAboutReading(result) {
     }
     if (warnings.length) setStatus(warnings.join(" "), "info");
 }
+
+/**
+ * Reads the bar the player is on again - tap a wrong note to go to its bar.
+ * A bar can add up and still be wrong, which only listening catches; this
+ * looks again at just that bar, in one request, and keeps the rest.
+ */
+async function rereadBar() {
+    if (!sourceFile || !currentMusicXml) return;
+    const bar = currentBar;
+    player.pause();
+    const name = ui.pieceName.textContent;
+    setUploadsEnabled(false);
+    ui.rereadBar.disabled = true;
+    const stopClock = showElapsed(`${readerName} is reading bar ${bar} again`, "usually a minute or two");
+    let result;
+    try {
+        const body = new FormData();
+        body.append("file", sourceFile);
+        for (const strip of sourceStrips) body.append("strips", strip);
+        body.append("instrument", ui.instrument.value);
+        body.append("musicxml", currentMusicXml);
+        body.append("bars", JSON.stringify([bar]));
+        result = readsHere
+            ? await ownKey.reread({
+                  file: sourceFile,
+                  strips: sourceStrips,
+                  instrument: ui.instrument.value,
+                  musicxml: currentMusicXml,
+                  bars: [bar],
+                  onProgress: stopClock.progress,
+              })
+            : await post("api/reread", body);
+    } catch (error) {
+        setStatus(`Could not read bar ${bar} again: ${error.message}`, "error");
+        return;
+    } finally {
+        stopClock();
+        setUploadsEnabled(true);
+        ui.rereadBar.disabled = false;
+    }
+
+    if (!result.changed.length) {
+        setStatus(`${readerName} read bar ${bar} the same way again. If it is still wrong, Edit notes can fix it by hand.`, "info");
+        return;
+    }
+    await showScore(result.musicxml, name, { ask: false });
+    ui.pieceName.textContent = name;
+    offerDownload(name.replace(/ — .*$/, ""));
+    score.markBars(result.uneven);
+    // Back to the bar that changed, so it can be heard straight away.
+    const step = timeline.steps.find((s) => s.measure === bar);
+    if (step) player.seek(step.time);
+    setStatus(`Bar ${bar} read again and corrected. Press play to hear it.`, "info");
+}
+
+ui.rereadBar.addEventListener("click", rereadBar);
 
 /** Sends my answers back, so the reader can correct the MusicXML. */
 async function sendAnswers(answers) {
@@ -1122,6 +1191,10 @@ function showPosition(time, step) {
     }
     const bar = timeline.steps[step]?.measure;
     ui.position.textContent = bar ? `bar ${bar}` : `${Math.max(time, 0).toFixed(1)}s`;
+    if (bar && bar !== currentBar) {
+        currentBar = bar;
+        ui.rereadBar.textContent = `Re-read bar ${bar}`;
+    }
 }
 
 function handleState(state) {
