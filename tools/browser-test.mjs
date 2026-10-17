@@ -1544,6 +1544,32 @@ async function run() {
             // 3. A PDF is left alone.
             const pdf = new File(["%PDF-1.4"], "page.pdf", { type: "application/pdf" });
 
+            // 4. A page saved as SVG, the way notation software exports one:
+            //    sized in points, no viewBox, the left half black. It has to
+            //    become a picture - SVG source is not something a model sees.
+            const svg = new File([
+                '<svg xmlns="http://www.w3.org/2000/svg" width="595.44" height="841.68">' +
+                '<rect width="297.72" height="841.68"/></svg>',
+            ], "page.svg", { type: "image/svg+xml" });
+            const drawn = await preparePhoto(svg);
+            const pixel = async (file, x, y) => {
+                const b = await createImageBitmap(file);
+                const c = document.createElement("canvas");
+                c.width = b.width; c.height = b.height;
+                const g = c.getContext("2d");
+                g.drawImage(b, 0, 0);
+                return g.getImageData(x * b.width, y * b.height, 1, 1).data[0];
+            };
+            // Some phones leave a file's type blank.
+            const untyped = await preparePhoto(new File([await svg.text()], "page.svg", { type: "" }));
+            let broken;
+            try {
+                await preparePhoto(new File(["<svg"], "broken.svg", { type: "image/svg+xml" }));
+                broken = "no error";
+            } catch (error) {
+                broken = error.message;
+            }
+
             return {
                 bigIn: await size(big),
                 bigOut: await size(prepared),
@@ -1552,6 +1578,13 @@ async function run() {
                 maxEdge: MAX_EDGE,
                 sidewaysOut: await size(upright),
                 pdfUntouched: (await preparePhoto(pdf)) === pdf,
+                svgType: drawn.type,
+                svgName: drawn.name,
+                svgOut: await size(drawn),
+                svgLeft: await pixel(drawn, 0.25, 0.5),
+                svgRight: await pixel(drawn, 0.75, 0.5),
+                untypedType: untyped.type,
+                broken,
             };
         `);
         check("a phone-sized photo is scaled to the long edge", Math.max(...photo.bigOut), photo.maxEdge);
@@ -1561,6 +1594,77 @@ async function run() {
         // 400 x 200 with "rotate 90" applied comes out 200 x 400.
         check("a sideways photo is turned upright", photo.sidewaysOut, [200, 400]);
         check("a PDF is left alone", photo.pdfUntouched, true);
+        check("an SVG page is drawn as a PNG", [photo.svgType, photo.svgName], ["image/png", "page.png"]);
+        check("at the full reading size", Math.max(...photo.svgOut), photo.maxEdge);
+        check("keeping its shape", photo.svgOut[0] / photo.svgOut[1], 595.44 / 841.68, 0.01);
+        check("with the drawing scaled to fill it", [photo.svgLeft, photo.svgRight], [0, 255]);
+        check("an SVG with no type is drawn too", photo.untypedType, "image/png");
+        check("an SVG that cannot be drawn says so", /Could not draw broken\.svg/.test(photo.broken), true);
+
+        console.log("\ncutting a page into strips");
+        const cut = await page.evaluate(`
+            const { cutIntoStrips } = await import("./js/photo.js");
+            // A page: white paper, a title, and systems of five staff lines
+            // with stems, separated by blank paper.
+            const pageOf = (systems) => new Promise((resolve) => {
+                const c = document.createElement("canvas");
+                c.width = 1200; c.height = 1700;
+                const g = c.getContext("2d");
+                g.fillStyle = "#fff"; g.fillRect(0, 0, 1200, 1700);
+                g.fillStyle = "#000";
+                g.fillRect(400, 60, 400, 30); // the title
+                for (let s = 0; s < systems; s++) {
+                    const top = 160 + s * 150;
+                    for (let line = 0; line < 5; line++) g.fillRect(60, top + 20 + line * 14, 1080, 2);
+                    for (let x = 100; x < 1100; x += 60) g.fillRect(x, top, 3, 100); // stems
+                }
+                c.toBlob((blob) => resolve(new File([blob], "page.png", { type: "image/png" })), "image/png");
+            });
+            const sizes = async (strips) => Promise.all(strips.map(async (s) => {
+                const b = await createImageBitmap(s);
+                return [b.width, b.height];
+            }));
+            const ten = await cutIntoStrips(await pageOf(10));
+            return {
+                ten: await sizes(ten),
+                names: ten.map((s) => s.name),
+                types: [...new Set(ten.map((s) => s.type))],
+                one: (await cutIntoStrips(await pageOf(1))).length,
+                blank: (await cutIntoStrips(await pageOf(0))).length,
+                pdf: (await cutIntoStrips(new File(["%PDF-1.4"], "page.pdf", { type: "application/pdf" }))).length,
+            };
+        `);
+        check("a page of ten systems is cut into strips", cut.ten.length >= 4 && cut.ten.length <= 8, true);
+        check("each the page's full width", [...new Set(cut.ten.map(([w]) => w))], [1200]);
+        check("together the whole page", cut.ten.reduce((sum, [, h]) => sum + h, 0), 1700);
+        check("named in order, in the page's format", [cut.names[0], cut.names[1], cut.types], ["page-1.png", "page-2.png", ["image/png"]]);
+        check("a single system is read whole", cut.one, 0);
+        check("so is a page with no music, and a PDF", [cut.blank, cut.pdf], [0, 0]);
+
+        console.log("\nreading a PDF from its pages");
+        const pdfBytes = readFileSync(join(ROOT, "tools/fixtures/systems.pdf")).toString("base64");
+        const pdf = await page.evaluate(`
+            const { pdfPages, stripsOf, MAX_EDGE } = await import("./js/photo.js");
+            const bytes = Uint8Array.from(atob("${pdfBytes}"), (c) => c.charCodeAt(0));
+            // Six systems on the first page, three on the second.
+            const file = new File([bytes], "systems.pdf", { type: "application/pdf" });
+            const size = async (f) => { const b = await createImageBitmap(f); return [b.width, b.height]; };
+            const pages = await pdfPages(file);
+            const strips = await stripsOf(file);
+            return {
+                pages: await Promise.all(pages.map(size)),
+                names: pages.map((p) => p.name),
+                maxEdge: MAX_EDGE,
+                strips: strips.length,
+                stripNames: strips.map((s) => s.name),
+                broken: (await stripsOf(new File(["%PDF-1.4 not really"], "broken.pdf", { type: "application/pdf" }))).length,
+            };
+        `);
+        check("each page of a PDF is drawn", pdf.names, ["systems-page-1.png", "systems-page-2.png"]);
+        check("at the full reading size", pdf.pages.map((p) => Math.max(...p)), [pdf.maxEdge, pdf.maxEdge]);
+        check("and cut into strips, page by page, in order",
+            pdf.strips > 2 && pdf.stripNames[0] === "systems-page-1-1.png" && pdf.stripNames.at(-1).startsWith("systems-page-2"), true);
+        check("a PDF that will not open is sent as it is", pdf.broken, 0);
 
         // --- the screen stays on through a reading -------------------------
         console.log("\nkeeping the screen on");

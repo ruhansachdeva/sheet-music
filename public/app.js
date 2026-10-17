@@ -7,7 +7,7 @@ import { PianoRoll } from "./js/midi.js";
 import { Player } from "./js/player.js";
 import { QuestionPanel } from "./js/questions.js";
 import { Editor } from "./js/editor/ui.js";
-import { preparePhoto } from "./js/photo.js";
+import { isSvg, preparePhoto, stripsOf } from "./js/photo.js";
 import { keepScreenOn } from "./js/wake.js";
 import * as ownKey from "./js/reader/browser.js";
 import { guessInstrument } from "./js/instrument-guess.js";
@@ -203,6 +203,8 @@ let lastInfo = "";
 
 /** The photo or PDF behind the current score, kept so answers can be applied to it. */
 let sourceFile = null;
+// The same page cut into strips between its systems, if it would cut.
+let sourceStrips = [];
 
 /** The MusicXML on screen, which a correction round starts from. */
 let currentMusicXml = "";
@@ -430,9 +432,9 @@ if (hasCamera()) {
 }
 
 ui.file.addEventListener("change", () => {
-    const file = ui.file.files?.[0];
-    if (!file) return;
-    loadFile(file);
+    const files = [...(ui.file.files ?? [])];
+    if (!files.length) return;
+    loadFiles(files);
     // Clear it, so picking the same file again still fires a change event.
     ui.file.value = "";
 });
@@ -453,11 +455,11 @@ document.addEventListener("dragleave", (event) => {
 });
 
 document.addEventListener("drop", (event) => {
-    const file = event.dataTransfer?.files?.[0];
-    if (!file) return;
+    const files = [...(event.dataTransfer?.files ?? [])];
+    if (!files.length) return;
     event.preventDefault();
     document.body.classList.remove("dropping");
-    loadFile(file);
+    loadFiles(files);
 });
 
 // The docked bar keeps only play, stop and position; the rest slides up.
@@ -553,6 +555,43 @@ window.addEventListener("unhandledrejection", (event) => {
 
 // --- loading ----------------------------------------------------------------
 
+/** The most pages read together: each is several images in the request. */
+const MAX_PAGES = 12;
+
+/** A file that is a page to be read: a photo, a scan, an SVG or a PDF. */
+function isPage(file) {
+    return file.type.startsWith("image/") || file.type === "application/pdf" || isSvg(file);
+}
+
+/**
+ * Several files at once are the pages of one piece - photos of each page, say
+ * - and are read together, in name order (IMG_0001 before IMG_0002), into one
+ * score. One file loads as itself.
+ */
+async function loadFiles(files) {
+    if (files.length === 1) return loadFile(files[0]);
+    player.stop();
+    if (!files.every(isPage)) {
+        setStatus("Several files can be read together when they are all photos or PDFs - the pages of one piece. Open other files one at a time.", "error");
+        return;
+    }
+    if (files.length > MAX_PAGES) {
+        setStatus(`That is ${files.length} pages; up to ${MAX_PAGES} can be read together.`, "error");
+        return;
+    }
+    if (!canRead) {
+        setStatus(`${noReaderText} Save a Gemini key above to read these pages here.`, "error");
+        return;
+    }
+    const pages = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    try {
+        await transcribe(pages);
+    } catch (error) {
+        console.error(error);
+        setStatus(`Could not read those pages: ${error.message}`, "error");
+    }
+}
+
 async function loadFile(file) {
     const name = file.name.toLowerCase();
     player.stop();
@@ -570,7 +609,7 @@ async function loadFile(file) {
             await showScore(await file.text(), file.name);
         } else if (name.endsWith(".mid") || name.endsWith(".midi")) {
             await showPianoRoll(await file.arrayBuffer(), file.name);
-        } else if (file.type.startsWith("image/") || file.type === "application/pdf") {
+        } else if (file.type.startsWith("image/") || file.type === "application/pdf" || isSvg(file)) {
             if (!canRead) {
                 setStatus(`${noReaderText} Save a Gemini key above to read ${file.name} here.`, "error");
                 return;
@@ -711,14 +750,35 @@ async function showPianoRoll(arrayBuffer, label) {
     askAboutInstrument(guessInstrument({ names: timeline.instrumentNames, drumShare: drumShare(timeline) }));
 }
 
-/** A photo or a PDF: it is read into MusicXML, then rendered like any score. */
-async function transcribe(original) {
+/**
+ * A photo or a PDF - or several, the pages of one piece - is read into
+ * MusicXML, then rendered like any score.
+ */
+async function transcribe(originals) {
+    const pages = [originals].flat();
     questionPanel.hide();
-    setStatus("Preparing the photo…", "busy");
-    const file = await preparePhoto(original);
+    setStatus(
+        pages.length > 1 ? `Preparing ${pages.length} pages…`
+            : pages[0].type === "application/pdf" ? "Preparing the pages…" : "Preparing the photo…",
+        "busy",
+    );
+    const prepared = [];
+    for (const page of pages) prepared.push(await preparePhoto(page));
+    const file = prepared[0];
+    // Every page in strips, in order; a page that will not cut goes whole.
+    let strips = [];
+    if (prepared.length === 1) {
+        strips = await stripsOf(file);
+    } else {
+        for (const page of prepared) {
+            const cut = await stripsOf(page);
+            strips.push(...(cut.length ? cut : [page]));
+        }
+    }
 
     const body = new FormData();
     body.append("file", file);
+    for (const strip of strips) body.append("strips", strip);
     body.append("instrument", ui.instrument.value);
 
     // One read at a time: a second upload mid-request would race the first.
@@ -727,7 +787,7 @@ async function transcribe(original) {
     let result;
     try {
         result = readsHere
-            ? await ownKey.transcribe({ file, instrument: ui.instrument.value, onProgress: stopClock.progress })
+            ? await ownKey.transcribe({ file, strips, instrument: ui.instrument.value, onProgress: stopClock.progress })
             : await post("api/transcribe", body);
     } finally {
         stopClock();
@@ -735,25 +795,41 @@ async function transcribe(original) {
     }
     await showScore(result.musicxml, result.title, { instrument: result.instrument });
     sourceFile = file;
+    sourceStrips = strips;
     ui.pieceName.textContent = result.title
         ? `${result.title} — read by ${readerName}`
         : `Read by ${readerName}`;
     offerDownload(result.title);
     questionPanel.show(result.questions);
-    warnIfLighter(result);
+    warnAboutReading(result);
 }
 
-/** A lighter model misreads more, so its reading is worth checking by eye. */
-function warnIfLighter(result) {
-    if (!result.fallback) return;
-    const why = result.fallback === "limit"
-        ? "has hit its free-tier limit"
-        : "was too busy";
-    setStatus(
-        `${readerName}'s usual model ${why}, so a lighter one read this, and it ` +
-            "misreads more often. Check it against the page, or try again later.",
-        "info",
-    );
+/**
+ * What is worth checking by eye in a reading: anything a lighter model read,
+ * since it misreads more, and any bar still not adding up after the recheck,
+ * since its rhythm is certainly off.
+ */
+function warnAboutReading(result) {
+    const warnings = [];
+    if (result.fallback) {
+        const why = result.fallback === "limit"
+            ? "has hit its free-tier limit"
+            : "was too busy";
+        warnings.push(
+            `${readerName}'s usual model ${why}, so a lighter one read this, and it ` +
+                "misreads more often. Check it against the page, or try again later.",
+        );
+    }
+    const bars = result.uneven ?? [];
+    if (bars.length) {
+        const one = bars.length === 1;
+        const list = bars.length > 6 ? `${bars.slice(0, 5).join(", ")} and ${bars.length - 5} more` : bars.join(", ");
+        warnings.push(
+            `${one ? "Bar" : "Bars"} ${list} ${one ? "does" : "do"} not add up to the time signature, ` +
+                `so ${one ? "its" : "their"} rhythm is off. Check ${one ? "it" : "them"} against the page.`,
+        );
+    }
+    if (warnings.length) setStatus(warnings.join(" "), "info");
 }
 
 /** Sends my answers back, so the reader can correct the MusicXML. */
@@ -765,6 +841,7 @@ async function sendAnswers(answers) {
     try {
         const body = new FormData();
         body.append("file", sourceFile);
+        for (const strip of sourceStrips) body.append("strips", strip);
         body.append("instrument", ui.instrument.value);
         body.append("musicxml", currentMusicXml);
         body.append("answers", JSON.stringify(answers));
@@ -772,6 +849,7 @@ async function sendAnswers(answers) {
         const result = readsHere
             ? await ownKey.refine({
                   file: sourceFile,
+                  strips: sourceStrips,
                   instrument: ui.instrument.value,
                   musicxml: currentMusicXml,
                   answers,
@@ -782,7 +860,7 @@ async function sendAnswers(answers) {
         ui.pieceName.textContent = `${result.title} — corrected`;
         offerDownload(result.title);
         questionPanel.show(result.questions);
-        warnIfLighter(result);
+        warnAboutReading(result);
     } catch (error) {
         setStatus(`Could not apply the answers: ${error.message}`, "error");
     } finally {

@@ -18,7 +18,9 @@ function check(label, actual, expected) {
  * with, the last one repeating. A status can be [status, retryAfterSeconds].
  * A 200 streams the read as Gemini does - a thinking summary, the answer in
  * pieces, then "completed" - and "failed" streams a read that fails, "cut" one
- * whose connection drops before the end. Every request is counted by model.
+ * whose connection drops before the end, "incomplete" one that runs out of
+ * room part-way, and "all thinking" one that runs out before writing anything.
+ * Every request is counted by model.
  */
 let script = {};
 let asked = {};
@@ -58,6 +60,13 @@ const fake = createServer(async (request, response) => {
     response.write(sse({ event_type: "step.start", index: 0, step: { type: "thought" } }));
     response.write(sse({ event_type: "step.delta", index: 0, delta: { type: "thought_summary", content: { text: "**Reading the Clef**\n\nIt is treble." } } }));
     response.write(sse({ event_type: "step.stop", index: 0 }));
+    // Given up part-way, as Gemini does under load: an error event, then the end.
+    if (status === "dropped") {
+        return response.end(sse({ event_type: "error", error: { code: 503, message: `${model} is currently experiencing high demand. Please try again later.` } }));
+    }
+    if (status === "all thinking") {
+        return response.end(sse({ event_type: "interaction.completed", interaction: { id: "x", model, status: "incomplete" } }));
+    }
     response.write(sse({ event_type: "step.start", index: 1, step: { type: "model_output" } }));
     // The answer in two pieces, the first split mid-event, as a network may.
     const first = sse({ event_type: "step.delta", index: 1, delta: { type: "text", text: answer.slice(0, 6) } });
@@ -70,7 +79,8 @@ const fake = createServer(async (request, response) => {
         event_type: "interaction.completed",
         interaction: status === "failed"
             ? { id: "x", model, status: "failed", error: { message: "the fake gave up" } }
-            : { id: "x", model, status: "completed", usage: { total_input_tokens: 1, total_output_tokens: 1 } },
+            : { id: "x", model, status: status === "incomplete" ? "incomplete" : "completed",
+                usage: { total_input_tokens: 1, total_output_tokens: 1, total_thought_tokens: 2 } },
     }));
 });
 fake.listen(0);
@@ -96,7 +106,7 @@ async function read(plan, models = "") {
     process.env.GEMINI_MODEL = models;
     try {
         const result = await gemini.generate(request);
-        return { model: result.model, fallback: result.fallback, asked };
+        return { model: result.model, fallback: result.fallback, text: result.text, incomplete: result.incomplete, usage: result.usage, asked };
     } catch (error) {
         return { error: error.status ?? error.message, message: error.message, asked };
     }
@@ -114,6 +124,21 @@ try {
     check("a read that fails part-way says so", [failedRead.error, /fake gave up/.test(failedRead.message)], [422, true]);
     const cut = await read({ "gemini-flash-latest": ["cut"] });
     check("a connection that drops before the end says so", [cut.error, /closed before/.test(cut.message)], [502, true]);
+
+    const dropped = await read({ "gemini-flash-latest": ["dropped", 200] });
+    check("a read dropped part-way for high demand is started over", [dropped.model, dropped.asked["gemini-flash-latest"]], ["gemini-flash-latest", 2]);
+    const droppedAgain = await read({ "gemini-flash-latest": ["dropped"] });
+    check("three times at most, then it says so", [droppedAgain.asked["gemini-flash-latest"], droppedAgain.error, /too busy/.test(droppedAgain.message)], [4, 503, true]);
+
+    console.log("\na read that runs out of room");
+    check("a finished read is not marked incomplete", streamed.incomplete, false);
+    check("with the thinking it took counted", streamed.usage, { input: 1, output: 1, thinking: 2 });
+    const outOfRoom = await read({ "gemini-flash-latest": ["incomplete"] });
+    check("one cut off part-way comes back, marked incomplete, to be carried on",
+        [outOfRoom.incomplete, outOfRoom.text], [true, '{"read by":"gemini-flash-latest"}']);
+    const allThinking = await read({ "gemini-flash-latest": ["all thinking"] });
+    check("one that thought until it ran out says so",
+        [allThinking.error, /no room left to write it down/.test(allThinking.message)], [413, true]);
 
     console.log("\na busy model is waited for");
     const brief = await read({ "gemini-flash-latest": [503, 503, 503, 503, 200] });

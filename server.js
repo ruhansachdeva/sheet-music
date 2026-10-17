@@ -49,25 +49,33 @@ app.get("/api/health", (_req, res) => {
 });
 
 /** A photo or PDF in, MusicXML plus any clarifying questions out. */
-app.post("/api/transcribe", upload.single("file"), async (req, res, next) => {
+/** The page, and the strips the browser cut it into, if it did. */
+const page = upload.fields([{ name: "file", maxCount: 1 }, { name: "strips", maxCount: 100 }]);
+
+function uploaded(req) {
+    const file = req.files?.file?.[0];
+    if (!file) throw new TranscribeError("No file uploaded.", 400);
+    return { file, strips: req.files.strips };
+}
+
+app.post("/api/transcribe", page, async (req, res, next) => {
     try {
-        if (!req.file) throw new TranscribeError("No file uploaded.", 400);
+        const { file, strips } = uploaded(req);
         const instrument = readInstrument(req.body);
         requireProvider();
 
-        const result = await transcribe({ file: req.file, instrument });
-        logUsage("transcribe", req.file, result);
-        res.json({ title: result.title, musicxml: result.musicxml, questions: result.questions,
-            instrument: result.instrument, model: result.model, fallback: result.fallback });
+        const result = await transcribe({ file, strips, instrument });
+        logUsage("transcribe", file, result);
+        res.json(reading(result));
     } catch (err) {
         next(err);
     }
 });
 
 /** The same file, the MusicXML so far and my answers in, a corrected score out. */
-app.post("/api/refine", upload.single("file"), async (req, res, next) => {
+app.post("/api/refine", page, async (req, res, next) => {
     try {
-        if (!req.file) throw new TranscribeError("No file uploaded.", 400);
+        const { file, strips } = uploaded(req);
         if (!req.body.musicxml) throw new TranscribeError("No musicxml to correct.", 400);
         const instrument = readInstrument(req.body);
 
@@ -83,18 +91,24 @@ app.post("/api/refine", upload.single("file"), async (req, res, next) => {
         requireProvider();
 
         const result = await refine({
-            file: req.file,
+            file,
+            strips,
             instrument,
             musicxml: req.body.musicxml,
             answers,
         });
-        logUsage("refine", req.file, result);
-        res.json({ title: result.title, musicxml: result.musicxml, questions: result.questions,
-            instrument: result.instrument, model: result.model, fallback: result.fallback });
+        logUsage("refine", file, result);
+        res.json(reading(result));
     } catch (err) {
         next(err);
     }
 });
+
+/** What the page is sent of a reading. */
+function reading(result) {
+    const { title, musicxml, questions, instrument, model, fallback, uneven } = result;
+    return { title, musicxml, questions, instrument, model, fallback, uneven };
+}
 
 function logUsage(route, file, result) {
     const { input, output } = result.usage ?? {};

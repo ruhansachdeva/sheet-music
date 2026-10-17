@@ -70,18 +70,50 @@ export async function checkKey(apiKey) {
  * `onProgress` hears each heading of the model's thinking as it streams in.
  */
 function generateHere(onProgress) {
+    const encoded = new Map(); // each file is read once, however many answers it takes
+    const encode = (blob) => {
+        if (!encoded.has(blob)) {
+            encoded.set(blob, base64(blob).then((data) => ({ data, mimeType: mimeTypeOf(blob) })));
+        }
+        return encoded.get(blob);
+    };
     return async (request) => {
-        const file = { data: await base64(request.file), mimeType: mimeTypeOf(request.file) };
-        return generate({ ...request, file }, settings(savedKey(), onProgress));
+        const file = await encode(request.file);
+        const strips = request.strips?.length ? await Promise.all(request.strips.map(encode)) : undefined;
+        return generate({ ...request, file, strips }, settings(savedKey(), onProgress));
     };
 }
 
-export function transcribe({ file, instrument, onProgress }) {
-    return read.transcribe(generateHere(onProgress), { file, instrument });
+export function transcribe({ file, strips, instrument, onProgress }) {
+    const progress = withPlace(onProgress);
+    return read.transcribe(generateHere(progress), {
+        file, strips, instrument, onContinue: progress.after, onRecheck: progress.recheck,
+    });
 }
 
-export function refine({ file, instrument, musicxml, answers, onProgress }) {
-    return read.refine(generateHere(onProgress), { file, instrument, musicxml, answers });
+export function refine({ file, strips, instrument, musicxml, answers, onProgress }) {
+    const progress = withPlace(onProgress);
+    return read.refine(generateHere(progress), {
+        file, strips, instrument, musicxml, answers, onContinue: progress.after, onRecheck: progress.recheck,
+    });
+}
+
+/**
+ * The model's headings - with, once a reading has gone past one answer, what
+ * the later answer is for in front of them: the bar a dense page is carrying
+ * on after, or the bars being looked at again. A reading that is still going
+ * should not look like one that has started over.
+ */
+function withPlace(onProgress = () => {}) {
+    let place = "";
+    const progress = (heading) => onProgress(place ? `${place} · ${heading}` : heading);
+    const now = (what) => {
+        place = what;
+        onProgress(place);
+    };
+    progress.after = (bar) => now(`carrying on after bar ${bar}`);
+    progress.recheck = (bars) => now(`rechecking ${bars} bar${bars === 1 ? "" : "s"} that did not add up`);
+    return progress;
 }
 
 function base64(blob) {

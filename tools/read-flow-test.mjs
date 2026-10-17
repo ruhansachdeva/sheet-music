@@ -46,6 +46,14 @@ const timing = readFileSync(join(ROOT, "samples/timing-test.musicxml"), "utf8");
 const asked = [];
 // What the stand-in does: read normally, or fail the way Gemini can.
 let behaviour = "read";
+// For a page too long for one answer: where each request said the score stopped.
+let carriedOn = [];
+// Twinkle with bar 2's first note read as an eighth, so the bar comes up short;
+// and what a recheck of it was asked, and whether it can fix it.
+const bar2 = /<measure number="2"[\s\S]*?<\/measure>/.exec(twinkle)[0];
+const misread = twinkle.replace(bar2, bar2.replace("<duration>480</duration>", "<duration>240</duration>"));
+let rechecked = [];
+let recheckFixes = true;
 
 const reader = createServer(async (request, response) => {
     // The page on the hosted site calls Gemini straight from the browser, so
@@ -73,12 +81,37 @@ const reader = createServer(async (request, response) => {
     }
     const { input = [], stream } = JSON.parse(body || "{}");
     const text = input.find((item) => item.type === "text")?.text ?? "";
+    // A page too dense for one answer: the first stops part-way through bar
+    // 2; the next starts again at bar 1 and stops part-way through bar 3; the
+    // last finishes. Put together, it is Twinkle.
+    if (behaviour === "long") {
+        const after = /It stops after measure (\d+)/.exec(text)?.[1] ?? null;
+        carriedOn.push(after);
+        const at = (n) => twinkle.indexOf(`<measure number="${n}"`);
+        const cut = (fields) => JSON.stringify(fields).slice(0, -2); // no closing quote and brace
+        const [output, status] = after === null
+            ? [cut({ title: "Twinkle", musicxml: twinkle.slice(0, at(2) + 30) }), "incomplete"]
+            : after === "1"
+              ? [cut({ rest: twinkle.slice(at(1), at(3) + 30) }), "incomplete"]
+              : [JSON.stringify({ rest: twinkle.slice(at(3)), instrument: "piano", questions: [] }), "completed"];
+        return streamed(output, status);
+    }
+    if (behaviour === "uneven") {
+        if (!text.includes("do not add up")) {
+            return streamed(JSON.stringify({ title: "Twinkle", musicxml: misread, instrument: "piano", questions: [] }));
+        }
+        rechecked.push(/Measure (\d+), voice 1: its durations total (\d+)/.exec(text)?.slice(1));
+        const fixed = recheckFixes ? bar2 : /<measure number="2"[\s\S]*?<\/measure>/.exec(misread)[0];
+        return streamed(JSON.stringify({ measures: [{ part: "P1", number: "2", musicxml: fixed }] }));
+    }
     const refining = text.includes("My answers:");
     asked.push({
         refining,
         stream,
         key,
         withImage: input.some((item) => item.type === "image"),
+        images: input.filter((item) => item.type === "image").map((item) => item.resolution ?? "default"),
+        strips: /comes as (\d+) images/.exec(text)?.[1] ?? null,
         answer: /My answer: (.*)/.exec(text)?.[1] ?? null,
     });
     const answer = behaviour === "not music"
@@ -92,16 +125,20 @@ const reader = createServer(async (request, response) => {
                 instrument: "violin",
                 questions: [{ id: "q1", measure: 2, question: "Is bar 2 a tie or a slur?", options: ["Tie", "Slur"] }],
             };
+    return streamed(JSON.stringify(answer));
+
     // Streamed as Gemini streams it: a summary of the thinking straight away,
     // then - 1.5s later, so the page is seen mid-read - the answer.
-    const event = (e) => `event: ${e.event_type}\ndata: ${JSON.stringify(e)}\n\n`;
-    response.writeHead(200, { "content-type": "text/event-stream", ...cors });
-    response.write(event({ event_type: "step.start", index: 0, step: { type: "thought" } }));
-    response.write(event({ event_type: "step.delta", index: 0, delta: { type: "thought_summary", content: { text: "**Reading the Staff**\n\nTreble clef." } } }));
-    await sleep(1500);
-    response.write(event({ event_type: "step.start", index: 1, step: { type: "model_output" } }));
-    response.write(event({ event_type: "step.delta", index: 1, delta: { type: "text", text: JSON.stringify(answer) } }));
-    response.end(event({ event_type: "interaction.completed", interaction: { model: "stand-in", status: "completed" } }));
+    async function streamed(output, status = "completed") {
+        const event = (e) => `event: ${e.event_type}\ndata: ${JSON.stringify(e)}\n\n`;
+        response.writeHead(200, { "content-type": "text/event-stream", ...cors });
+        response.write(event({ event_type: "step.start", index: 0, step: { type: "thought" } }));
+        response.write(event({ event_type: "step.delta", index: 0, delta: { type: "thought_summary", content: { text: "**Reading the Staff**\n\nTreble clef." } } }));
+        await sleep(1500);
+        response.write(event({ event_type: "step.start", index: 1, step: { type: "model_output" } }));
+        response.write(event({ event_type: "step.delta", index: 1, delta: { type: "text", text: output } }));
+        response.end(event({ event_type: "interaction.completed", interaction: { model: "stand-in", status } }));
+    }
 });
 reader.listen(0);
 await once(reader, "listening");
@@ -281,6 +318,116 @@ try {
     const notMusic = await failedRead();
     check("a photo that is not music is said to be so", /not.*sheet music/i.test(notMusic.said), true);
     check("and unlocks the uploads", notMusic.unlocked, true);
+
+    console.log("\na page too long for one answer");
+    const longRead = () => evaluate(`
+        const canvas = document.createElement("canvas");
+        canvas.width = 60;
+        canvas.height = 60;
+        const png = await new Promise((r) => canvas.toBlob(r, "image/png"));
+        const input = document.getElementById("file");
+        const files = new DataTransfer();
+        files.items.add(new File([png], "dense.png", { type: "image/png" }));
+        input.files = files.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        const piece = document.getElementById("piece-name");
+        const status = document.getElementById("status");
+        const said = new Set();
+        // Done when a new score is up, or the read has failed - the piece's
+        // name may already say "read by" from the reading before.
+        const before = window.sheetMusic.timeline;
+        for (let i = 0; i < 200 && window.sheetMusic.timeline === before && !status.classList.contains("error"); i++) {
+            await new Promise((r) => setTimeout(r, 100));
+            said.add(status.textContent.replace(/\\d+:\\d\\d/, "m:ss"));
+        }
+        // The status line settles once the score is drawn.
+        await new Promise((r) => setTimeout(r, 300));
+        return {
+            piece: piece.textContent,
+            notes: window.sheetMusic.timeline.notes.length,
+            said: [...said],
+        };
+    `);
+    console.log("\na page with many systems");
+    // Ten systems of staff lines with blank paper between, through the picker.
+    const stripsRead = () => evaluate(`
+        const c = document.createElement("canvas");
+        c.width = 1200; c.height = 1700;
+        const g = c.getContext("2d");
+        g.fillStyle = "#fff"; g.fillRect(0, 0, 1200, 1700);
+        g.fillStyle = "#000";
+        for (let s = 0; s < 10; s++) {
+            for (let line = 0; line < 5; line++) g.fillRect(60, 180 + s * 150 + line * 14, 1080, 2);
+        }
+        const png = await new Promise((r) => c.toBlob(r, "image/png"));
+        const input = document.getElementById("file");
+        const files = new DataTransfer();
+        files.items.add(new File([png], "page.png", { type: "image/png" }));
+        input.files = files.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        // Done when a new score is up, or the read has failed.
+        const before = window.sheetMusic.timeline;
+        const status = document.getElementById("status");
+        for (let i = 0; i < 200 && window.sheetMusic.timeline === before && !status.classList.contains("error"); i++) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        return document.getElementById("piece-name").textContent;
+    `);
+    behaviour = "read";
+    const stripCount = asked.length;
+    const pagesRead = asked.length + 1;
+    check("is read", await stripsRead(), "Twinkle — read by Gemini");
+    const sentStrips = asked[stripCount];
+    check("from strips, each in full detail", sentStrips.images.length > 1 && sentStrips.images.every((r) => r === "ultra_high"), true);
+    check("said to be one page in that many slices", sentStrips.strips, String(sentStrips.images.length));
+
+    console.log("\nseveral pages of one piece");
+    const severalRead = await evaluate(`
+        // Two small pages, chosen out of order: each too small to cut.
+        const page = async (shade) => {
+            const c = document.createElement("canvas");
+            c.width = 300; c.height = 200;
+            const g = c.getContext("2d");
+            g.fillStyle = shade; g.fillRect(0, 0, 300, 200);
+            return new Promise((r) => c.toBlob(r, "image/png"));
+        };
+        const input = document.getElementById("file");
+        const files = new DataTransfer();
+        files.items.add(new File([await page("#eee")], "IMG_0010.png", { type: "image/png" }));
+        files.items.add(new File([await page("#fff")], "IMG_0009.png", { type: "image/png" }));
+        input.files = files.files;
+        const before = window.sheetMusic.timeline;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        const status = document.getElementById("status");
+        for (let i = 0; i < 200 && window.sheetMusic.timeline === before && !status.classList.contains("error"); i++) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        return document.getElementById("piece-name").textContent;
+    `);
+    const both = asked.at(-1);
+    check("are read together, into one score", [severalRead, asked.length - stripCount], ["Twinkle — read by Gemini", 2]);
+    check("in one request with both pages, said to be in order", [both.images.length, both.strips], [2, "2"]);
+
+    behaviour = "long";
+    carriedOn = [];
+    const long = await longRead();
+    check("it is read over several answers", carriedOn, [null, "1", "2"]);
+    check("and comes out whole", [long.piece, long.notes], ["Twinkle — read by Gemini", 35]);
+
+    console.log("\na bar that does not add up");
+    behaviour = "uneven";
+    rechecked = [];
+    recheckFixes = true;
+    const evened = await longRead();
+    const status = () => evaluate(`return document.getElementById("status").textContent`);
+    check("is sent back to be looked at again, saying what it totals", rechecked, [["2", "1680"]]);
+    check("and the corrected bar goes in", [evened.piece, evened.notes], ["Twinkle — read by Gemini", 35]);
+    check("leaving nothing to warn about", /add up/.test(await status()), false);
+    rechecked = [];
+    recheckFixes = false;
+    await longRead();
+    check("a bar the recheck cannot fix is pointed out",
+        /Bar 2 does not add up to the time signature/.test(await status()), true);
     behaviour = "read";
     // --- the hosted copy, reading with your own key -----------------------
     // The static build, as GitHub Pages serves it: no server, an api/health
@@ -386,6 +533,22 @@ try {
     check("and the answer applied", [hostedRead.corrected, hostedRead.bpm], ["Twinkle — corrected", 96]);
     check("the page sent the photo, with your key, streamed",
         fromPage.map((a) => [a.withImage, a.key, a.stream]), [[true, "my-own-key", true], [true, "my-own-key", true]]);
+
+    behaviour = "long";
+    carriedOn = [];
+    const longHere = await longRead();
+    check("a page too long for one answer is read over several here too", carriedOn, [null, "1", "2"]);
+    check("and comes out whole", [longHere.piece, longHere.notes], ["Twinkle — read by Gemini", 35]);
+    check("saying which bar it is carrying on after",
+        longHere.said.some((s) => /— carrying on after bar 2 · Reading the Staff$/.test(s)), true);
+    behaviour = "uneven";
+    rechecked = [];
+    recheckFixes = true;
+    const evenedHere = await longRead();
+    check("a bar that does not add up is rechecked here too", [rechecked.length, evenedHere.notes], [1, 35]);
+    check("saying so while it does",
+        evenedHere.said.some((s) => /— rechecking 1 bar that did not add up · Reading the Staff$/.test(s)), true);
+    behaviour = "read";
 
     // The key is remembered on the next visit, and can be forgotten.
     await send("Page.navigate", { url: hosted });

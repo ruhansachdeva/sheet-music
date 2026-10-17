@@ -61,22 +61,31 @@ const FALLBACK_REASONS = { 503: "busy", 429: "limit" };
 /** What a finished read failing because the model was overloaded says. */
 const OVERLOADED = /overload|high demand|unavailable|try again later/i;
 
+/** How many times a read given up part-way as overloaded is started over. */
+const OVERLOADED_RETRIES = 3;
+
 /**
- * Reads a file with Gemini. `file` is `{ data, mimeType }`, the data base64.
+ * Reads a file with Gemini. `file` is `{ data, mimeType }`, the data base64;
+ * `strips`, if the page was cut into strips, are more of the same, and are
+ * sent in its place.
  * `settings`: `apiKey`, and optionally `models`, `apiBase`, `thinking`,
  * `maxOutputTokens`, `busyPatienceMs`, `fetch`, `log`, and `onProgress`,
  * called with each heading of the model's thinking as it streams in.
  */
-export async function generate({ system, text, file, schema }, settings) {
+export async function generate({ system, text, file, strips, schema }, settings) {
     const config = withDefaults(settings);
 
-    // A PDF reads best with the pages first; a single image reads best with the
-    // instruction first. Both orderings come from Google's own docs.
+    // A PDF reads best with the pages first; an image reads best with the
+    // instruction first. Both orderings come from Google's own docs. Strips
+    // are each a line or two of music, read at the highest resolution there
+    // is: the detail is the point of cutting the page up.
     const source = sourceItem(file);
-    const input =
-        source.type === "document"
-            ? [source, { type: "text", text }]
-            : [{ type: "text", text }, source];
+    const input = strips?.length
+        ? [{ type: "text", text }, ...strips.map(sourceItem).map((item) =>
+            item.type === "image" ? { ...item, resolution: "ultra_high" } : item)]
+        : source.type === "document"
+          ? [source, { type: "text", text }]
+          : [{ type: "text", text }, source];
 
     const requestFor = (model) => JSON.stringify({
         model,
@@ -137,20 +146,22 @@ function withDefaults(settings) {
  * request Gemini turned away, so the caller can try another model or explain.
  */
 async function read(body, config) {
-    const started = Date.now();
-    for (;;) {
-        const response = await startWithRetries(body, config, started);
+    for (let dropped = 0; ; dropped++) {
+        const response = await startWithRetries(body, config, Date.now());
         if (!response.ok) return { response };
 
         const interaction = await follow(response, config);
-        // A read can also be refused after it starts, as a failed interaction.
-        // Overloaded is the busy case again, and worth the same patience.
+        // A read can also be given up part-way, as overloaded - minutes in,
+        // on a long page. That is the busy case again: it is worth starting
+        // over, a few times, each start with its own patience.
         const why = interaction.error?.message ?? interaction.errors?.[0]?.message ?? "";
         const busy = interaction.status === "failed" && OVERLOADED.test(why);
-        if (!busy || Date.now() - started + BUSY_WAIT_MS > config.busyPatienceMs) return { interaction };
+        if (!busy || dropped >= OVERLOADED_RETRIES) return { interaction };
 
-        config.log(`gemini: the read failed as overloaded, retrying in ${BUSY_WAIT_MS / 1000}s`);
-        await sleep(BUSY_WAIT_MS);
+        const wait = Math.min(BUSY_WAIT_MS, config.busyPatienceMs);
+        config.log(`gemini: the read failed as overloaded, retrying in ${Math.round(wait / 1000)}s`);
+        config.onProgress("Gemini is busy - starting again shortly");
+        await sleep(wait);
     }
 }
 
@@ -218,7 +229,15 @@ async function follow(response, config) {
     let finished = null;
 
     const handle = (event) => {
-        if (event.error) throw new ReadError(`Gemini stopped reading (${event.error.message ?? "an error"}).`, 502);
+        if (event.error) {
+            // Overloaded part-way is the busy case again: ended as a failed
+            // read, so it is waited out and tried again like any other.
+            if (OVERLOADED.test(event.error.message ?? "")) {
+                finished = { status: "failed", error: event.error };
+                return;
+            }
+            throw new ReadError(`Gemini stopped reading (${event.error.message ?? "an error"}).`, 502);
+        }
         switch (event.event_type) {
             case "step.start":
                 kinds[event.index] = event.step?.type;
@@ -290,14 +309,11 @@ async function call(config, path, init) {
 }
 
 function readResult(body, model) {
-    if (body.status === "incomplete") {
-        throw new ReadError(
-            "The score was too long to transcribe in one go. Try a single page or a tighter crop.",
-            413,
-        );
-    }
-    if (body.status !== "completed" || body.errors?.length) {
+    if (!["completed", "incomplete"].includes(body.status) || body.errors?.length) {
         const why = body.error?.message ?? body.errors?.[0]?.message ?? `the read ended as ${body.status}`;
+        if (OVERLOADED.test(why)) {
+            throw new ReadError("Gemini is too busy to finish a reading just now. Busy spells pass - try again in a few minutes.", 503);
+        }
         throw new ReadError(`Gemini could not read this file (${why}).`, 422);
     }
 
@@ -309,12 +325,26 @@ function readResult(body, model) {
         .map((item) => item.text)
         .join("");
 
+    // Incomplete is the output budget running out. Thinking comes out of the
+    // same budget, so a read can be cut off before writing anything at all.
+    const incomplete = body.status === "incomplete";
+    if (incomplete && !text) {
+        throw new ReadError(
+            "Gemini spent its whole answer working out the page and had no room left to write it " +
+                "down. Try again, or try a tighter crop.",
+            413,
+        );
+    }
+
     return {
         text,
+        // Cut off part-way: the reading carries on from where it got to.
+        incomplete,
         model: body.model ?? model,
         usage: {
             input: body.usage?.total_input_tokens,
             output: body.usage?.total_output_tokens,
+            thinking: body.usage?.total_thought_tokens,
         },
     };
 }
