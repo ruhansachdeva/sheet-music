@@ -54,6 +54,13 @@ const bar2 = /<measure number="2"[\s\S]*?<\/measure>/.exec(twinkle)[0];
 const misread = twinkle.replace(bar2, bar2.replace("<duration>480</duration>", "<duration>240</duration>"));
 let rechecked = [];
 let recheckFixes = true;
+// Twinkle with bars 1 and 2 skipped, as when a strip is passed over: bar 3
+// opens the part, with the attributes. And what was asked for to fill it.
+const barOf = (n) => new RegExp(`<measure number="${n}"[\\s\\S]*?</measure>`).exec(twinkle)[0];
+const opening = /<attributes>[\s\S]*?<\/attributes>/.exec(barOf(1))[0];
+const skipping = twinkle.replace(barOf(1), "").replace(barOf(2), "")
+    .replace(/(<measure number="3"[^>]*>)/, `$1${opening}`);
+let filled = [];
 
 const reader = createServer(async (request, response) => {
     // The page on the hosted site calls Gemini straight from the browser, so
@@ -95,6 +102,13 @@ const reader = createServer(async (request, response) => {
               ? [cut({ rest: twinkle.slice(at(1), at(3) + 30) }), "incomplete"]
               : [JSON.stringify({ rest: twinkle.slice(at(3)), instrument: "piano", questions: [] }), "completed"];
         return streamed(output, status);
+    }
+    if (behaviour === "skipping") {
+        if (!text.includes("It skips some measures")) {
+            return streamed(JSON.stringify({ title: "Twinkle", musicxml: skipping, instrument: "piano", questions: [] }));
+        }
+        filled.push(/- measures (.*)/.exec(text)?.[1]);
+        return streamed(JSON.stringify({ measures: [1, 2].map((n) => ({ part: "P1", number: String(n), musicxml: barOf(n) })) }));
     }
     if (behaviour === "uneven") {
         if (!text.includes("do not add up")) {
@@ -413,6 +427,13 @@ try {
     const long = await longRead();
     check("it is read over several answers", carriedOn, [null, "1", "2"]);
     check("and comes out whole", [long.piece, long.notes], ["Twinkle — read by Gemini", 35]);
+
+    console.log("\nbars the reading skipped");
+    behaviour = "skipping";
+    filled = [];
+    const refilled = await longRead();
+    check("are asked for by number", filled, ["1-2"]);
+    check("and put back in place", [refilled.piece, refilled.notes], ["Twinkle — read by Gemini", 35]);
 
     console.log("\na bar that does not add up");
     behaviour = "uneven";

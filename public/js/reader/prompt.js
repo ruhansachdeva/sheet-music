@@ -83,7 +83,7 @@ export const RECHECK_SCHEMA = {
     properties: {
         measures: {
             type: "array",
-            description: "Each measure that was asked about, corrected.",
+            description: "Each measure that was asked for, in full.",
             items: {
                 type: "object",
                 properties: {
@@ -112,6 +112,7 @@ Output a complete, valid MusicXML 3.1 \`score-partwise\` document:
 - <attributes> in the first measure with <divisions>, <key>, <time> and a <clef> per staff. Pick divisions that make every duration in the piece a whole number (480 is a safe default; it divides into triplets, sixteenths and dotted notes).
 - Tempo as <direction> with <sound tempo="..."/> and a <metronome> display, taken from the score's marking. The <metronome> shows the mark as printed - its <beat-unit>, any <beat-unit-dot/>, and <per-minute>. <sound tempo> is ALWAYS quarter notes per minute, so convert: dotted quarter = 60 is tempo 90, half = 60 is tempo 120, eighth = 120 is tempo 60. If the score has no tempo marking, leave the tempo out rather than inventing one.
 - Every measure's durations must add up to the time signature, in every voice. Check each measure before moving on: sum the <duration> values per voice and compare against divisions × beats. This is the most common mistake - if a measure does not add up, you have misread a note, a dot or a rest.
+- Measures numbered 1, 2, 3… in order from the first bar on the page (a pickup bar before the first full bar is number 0, with implicit="yes"). Where bar numbers are printed at the start of systems, use them to check you have not skipped or doubled a bar.
 - Rests as <rest/> notes with real durations, never as gaps.
 - Dotted notes with <dot/> as well as the matching <duration>.
 - Ties with BOTH <tie type="start"/> or <tie type="stop"/> inside <note>, and <tied type="start"/> or <tied type="stop"/> inside <notations>. Tied notes must have identical pitch.
@@ -198,7 +199,36 @@ ${musicxml}`;
 
 /** Said alongside music sent as strips, so they are read as one score. */
 export function aboutStrips(count) {
-    return `\n\nThe music comes as ${count} images, in reading order: slices cut between systems (and between pages, if it has several), so each can be seen in detail. Together they are the whole score, and the bars run on from one image to the next.`;
+    return `\n\nThe music comes as ${count} images, in reading order: slices cut between systems (and between pages, if it has several), so each can be seen in detail. Together they are the whole score, and the bars run on from one image to the next. Start with the first image - it holds the top of the first page and bar 1 - and read every image; none of them is only a title.`;
+}
+
+/**
+ * Asking for bars a reading skipped. `missing` is from measures.js:
+ * [{ part, numbers }].
+ */
+export function userPromptForMissing(instrument, musicxml, missing) {
+    const span = (numbers) => {
+        const runs = [];
+        for (const n of numbers) {
+            const run = runs.at(-1);
+            if (run && n === run[1] + 1) run[1] = n;
+            else runs.push([n, n]);
+        }
+        return runs.map(([a, b]) => (a === b ? `${a}` : `${a}-${b}`)).join(", ");
+    };
+    const lines = missing
+        .map(({ part, numbers }) => `- ${missing.length > 1 ? `Part ${part}: ` : ""}measures ${span(numbers)}`)
+        .join("\n");
+
+    return `Here is the MusicXML you produced for this sheet music (instrument: ${instrument}). It skips some measures:
+
+${lines}
+
+Read these measures from the page - check the bar numbers printed at the start of each system to find them - and write each one as a whole <measure> element, in the same compact style, with its part id and number. The first measure of a part carries the <attributes> (divisions, key, time and clef) and any tempo marking. Keep to the same divisions, instrument ids and voices as the rest of the score. Return only these measures.
+
+The MusicXML so far:
+
+${musicxml}`;
 }
 
 export function userPromptForRefine(instrument, musicxml, answers) {
