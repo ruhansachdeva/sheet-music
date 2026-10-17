@@ -83,7 +83,7 @@ export const RECHECK_SCHEMA = {
     properties: {
         measures: {
             type: "array",
-            description: "Each measure that was asked about, corrected.",
+            description: "Each measure that was asked for, in full.",
             items: {
                 type: "object",
                 properties: {
@@ -200,6 +200,35 @@ ${musicxml}`;
 /** Said alongside music sent as strips, so they are read as one score. */
 export function aboutStrips(count) {
     return `\n\nThe music comes as ${count} images, in reading order: slices cut between systems (and between pages, if it has several), so each can be seen in detail. Together they are the whole score, and the bars run on from one image to the next. Start with the first image - it holds the top of the first page and bar 1 - and read every image; none of them is only a title.`;
+}
+
+/**
+ * Asking for bars a reading skipped. `missing` is from measures.js:
+ * [{ part, numbers }].
+ */
+export function userPromptForMissing(instrument, musicxml, missing) {
+    const span = (numbers) => {
+        const runs = [];
+        for (const n of numbers) {
+            const run = runs.at(-1);
+            if (run && n === run[1] + 1) run[1] = n;
+            else runs.push([n, n]);
+        }
+        return runs.map(([a, b]) => (a === b ? `${a}` : `${a}-${b}`)).join(", ");
+    };
+    const lines = missing
+        .map(({ part, numbers }) => `- ${missing.length > 1 ? `Part ${part}: ` : ""}measures ${span(numbers)}`)
+        .join("\n");
+
+    return `Here is the MusicXML you produced for this sheet music (instrument: ${instrument}). It skips some measures:
+
+${lines}
+
+Read these measures from the page - check the bar numbers printed at the start of each system to find them - and write each one as a whole <measure> element, in the same compact style, with its part id and number. The first measure of a part carries the <attributes> (divisions, key, time and clef) and any tempo marking. Keep to the same divisions, instrument ids and voices as the rest of the score. Return only these measures.
+
+The MusicXML so far:
+
+${musicxml}`;
 }
 
 export function userPromptForRefine(instrument, musicxml, answers) {
