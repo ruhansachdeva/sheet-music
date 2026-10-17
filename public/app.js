@@ -8,6 +8,7 @@ import { Player } from "./js/player.js";
 import { QuestionPanel } from "./js/questions.js";
 import { Editor } from "./js/editor/ui.js";
 import { isSvg, preparePhoto, stripsOf } from "./js/photo.js";
+import { keepScreenOn } from "./js/wake.js";
 import * as ownKey from "./js/reader/browser.js";
 import { guessInstrument } from "./js/instrument-guess.js";
 
@@ -782,7 +783,7 @@ async function transcribe(originals) {
 
     // One read at a time: a second upload mid-request would race the first.
     setUploadsEnabled(false);
-    const stopClock = showElapsed(`Reading your sheet music with ${readerName}`);
+    const stopClock = showElapsed(`Reading your sheet music with ${readerName}`, howLong(strips));
     let result;
     try {
         result = readsHere
@@ -844,7 +845,7 @@ async function sendAnswers(answers) {
     if (!sourceFile) return;
     questionPanel.setBusy(true);
     setUploadsEnabled(false);
-    const stopClock = showElapsed(`${readerName} is applying your answers`);
+    const stopClock = showElapsed(`${readerName} is applying your answers`, howLong(sourceStrips));
     try {
         const body = new FormData();
         body.append("file", sourceFile);
@@ -882,10 +883,21 @@ async function sendAnswers(answers) {
  * three, and a sentence that never changes for that long looks like a hang.
  * Returns the function that stops it.
  */
-function showElapsed(message) {
+/**
+ * What to expect, until the reader says what it is doing. A page cut into
+ * several strips is a dense one, and takes longer: about seven minutes in
+ * real reads of a page of sixteenth-note drums.
+ */
+function howLong(strips) {
+    return strips.length > 2 ? "a dense page takes five to ten minutes" : "usually one to four minutes";
+}
+
+function showElapsed(message, estimate = "usually one to four minutes") {
     reading = true;
+    // A locked screen would suspend the page and drop the reading.
+    const letScreenSleep = keepScreenOn();
     const started = Date.now();
-    let detail = "usually one to four minutes";
+    let detail = estimate;
     const tick = () => {
         const seconds = Math.floor((Date.now() - started) / 1000);
         const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -895,6 +907,7 @@ function showElapsed(message) {
     const timer = setInterval(tick, 1000);
     const stop = () => {
         clearInterval(timer);
+        letScreenSleep();
         reading = false;
     };
     // What the reader says it is working on, in place of the estimate - only

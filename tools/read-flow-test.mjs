@@ -382,15 +382,20 @@ try {
         // Done when a new score is up, or the read has failed.
         const before = window.sheetMusic.timeline;
         const status = document.getElementById("status");
+        const said = new Set();
         for (let i = 0; i < 200 && window.sheetMusic.timeline === before && !status.classList.contains("error"); i++) {
             await new Promise((r) => setTimeout(r, 100));
+            said.add(status.textContent.replace(/\\d+:\\d\\d/, "m:ss"));
         }
-        return document.getElementById("piece-name").textContent;
+        return { piece: document.getElementById("piece-name").textContent, said: [...said] };
     `);
     behaviour = "read";
     const stripCount = asked.length;
     const pagesRead = asked.length + 1;
-    check("is read", await stripsRead(), "Twinkle — read by Gemini");
+    const dense = await stripsRead();
+    check("is read", dense.piece, "Twinkle — read by Gemini");
+    check("saying a dense page takes longer",
+        dense.said.includes("Reading your sheet music with Gemini… m:ss — a dense page takes five to ten minutes"), true);
     const sentStrips = asked[stripCount];
     check("from strips, each in full detail", sentStrips.images.length > 1 && sentStrips.images.every((r) => r === "ultra_high"), true);
     check("said to be one page in that many slices", sentStrips.strips, String(sentStrips.images.length));
