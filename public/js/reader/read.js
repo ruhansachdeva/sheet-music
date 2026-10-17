@@ -71,7 +71,9 @@ function seen(strips) {
  * the score's numbering shows the gap.
  */
 async function fillMissing(generate, result, { file, strips, instrument, onMissing = () => {} }) {
-    const missing = missingMeasures(result.musicxml);
+    // Up to the bar the score says it runs to, so an ending that was never
+    // written counts as missing too.
+    const missing = missingMeasures(result.musicxml, result.bars);
     if (!missing.length) return result;
     const wanted = new Set(missing.flatMap(({ part, numbers }) => numbers.map((n) => `${part}\n${n}`)));
     onMissing(wanted.size);
@@ -229,7 +231,7 @@ async function complete(generate, request, onContinue = () => {}) {
         onContinue(where.number);
         const next = await generate({
             ...request,
-            text: userPromptForContinuing(request.text, score, where),
+            text: userPromptForContinuing(request.text, score, where, partialNumber(first.text, "bars")),
             schema: CONTINUATION_SCHEMA,
         });
         fallback ||= next.fallback;
@@ -249,6 +251,7 @@ async function complete(generate, request, onContinue = () => {}) {
         return {
             text: JSON.stringify({
                 title: partialField(first.text, "title"),
+                bars: partialNumber(first.text, "bars"),
                 musicxml: closed(whole),
                 instrument: rest.instrument,
                 questions: rest.questions,
@@ -297,6 +300,12 @@ export function partialField(json, key) {
         }
     }
     return out;
+}
+
+/** A whole-number field from JSON that may be cut off later on, or null. */
+export function partialNumber(json, key) {
+    const found = new RegExp(`"${key}"\\s*:\\s*(-?\\d+)\\s*[,}]`).exec(json ?? "");
+    return found ? Number(found[1]) : null;
 }
 
 /** The MusicXML up to the end of its last finished measure, or "". */
@@ -399,6 +408,8 @@ export function parseResult(raw) {
 
     return {
         title: parsed.title || "Untitled",
+        // The number of the last bar, as the reader counted it on the page.
+        bars: Number.isInteger(parsed.bars) && parsed.bars > 0 ? parsed.bars : null,
         musicxml: parsed.musicxml,
         // What the page looks written for, as the model read it.
         instrument: typeof parsed.instrument === "string" ? parsed.instrument : "unknown",
