@@ -60,6 +60,10 @@ const fake = createServer(async (request, response) => {
     response.write(sse({ event_type: "step.start", index: 0, step: { type: "thought" } }));
     response.write(sse({ event_type: "step.delta", index: 0, delta: { type: "thought_summary", content: { text: "**Reading the Clef**\n\nIt is treble." } } }));
     response.write(sse({ event_type: "step.stop", index: 0 }));
+    // Given up part-way, as Gemini does under load: an error event, then the end.
+    if (status === "dropped") {
+        return response.end(sse({ event_type: "error", error: { code: 503, message: `${model} is currently experiencing high demand. Please try again later.` } }));
+    }
     if (status === "all thinking") {
         return response.end(sse({ event_type: "interaction.completed", interaction: { id: "x", model, status: "incomplete" } }));
     }
@@ -120,6 +124,11 @@ try {
     check("a read that fails part-way says so", [failedRead.error, /fake gave up/.test(failedRead.message)], [422, true]);
     const cut = await read({ "gemini-flash-latest": ["cut"] });
     check("a connection that drops before the end says so", [cut.error, /closed before/.test(cut.message)], [502, true]);
+
+    const dropped = await read({ "gemini-flash-latest": ["dropped", 200] });
+    check("a read dropped part-way for high demand is started over", [dropped.model, dropped.asked["gemini-flash-latest"]], ["gemini-flash-latest", 2]);
+    const droppedAgain = await read({ "gemini-flash-latest": ["dropped"] });
+    check("three times at most, then it says so", [droppedAgain.asked["gemini-flash-latest"], droppedAgain.error, /too busy/.test(droppedAgain.message)], [4, 503, true]);
 
     console.log("\na read that runs out of room");
     check("a finished read is not marked incomplete", streamed.incomplete, false);

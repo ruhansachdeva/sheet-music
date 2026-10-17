@@ -7,7 +7,7 @@ import { PianoRoll } from "./js/midi.js";
 import { Player } from "./js/player.js";
 import { QuestionPanel } from "./js/questions.js";
 import { Editor } from "./js/editor/ui.js";
-import { isSvg, preparePhoto } from "./js/photo.js";
+import { cutIntoStrips, isSvg, preparePhoto } from "./js/photo.js";
 import * as ownKey from "./js/reader/browser.js";
 import { guessInstrument } from "./js/instrument-guess.js";
 
@@ -202,6 +202,8 @@ let lastInfo = "";
 
 /** The photo or PDF behind the current score, kept so answers can be applied to it. */
 let sourceFile = null;
+// The same page cut into strips between its systems, if it would cut.
+let sourceStrips = [];
 
 /** The MusicXML on screen, which a correction round starts from. */
 let currentMusicXml = "";
@@ -715,9 +717,11 @@ async function transcribe(original) {
     questionPanel.hide();
     setStatus("Preparing the photo…", "busy");
     const file = await preparePhoto(original);
+    const strips = await cutIntoStrips(file);
 
     const body = new FormData();
     body.append("file", file);
+    for (const strip of strips) body.append("strips", strip);
     body.append("instrument", ui.instrument.value);
 
     // One read at a time: a second upload mid-request would race the first.
@@ -726,7 +730,7 @@ async function transcribe(original) {
     let result;
     try {
         result = readsHere
-            ? await ownKey.transcribe({ file, instrument: ui.instrument.value, onProgress: stopClock.progress })
+            ? await ownKey.transcribe({ file, strips, instrument: ui.instrument.value, onProgress: stopClock.progress })
             : await post("api/transcribe", body);
     } finally {
         stopClock();
@@ -734,6 +738,7 @@ async function transcribe(original) {
     }
     await showScore(result.musicxml, result.title, { instrument: result.instrument });
     sourceFile = file;
+    sourceStrips = strips;
     ui.pieceName.textContent = result.title
         ? `${result.title} — read by ${readerName}`
         : `Read by ${readerName}`;
@@ -779,6 +784,7 @@ async function sendAnswers(answers) {
     try {
         const body = new FormData();
         body.append("file", sourceFile);
+        for (const strip of sourceStrips) body.append("strips", strip);
         body.append("instrument", ui.instrument.value);
         body.append("musicxml", currentMusicXml);
         body.append("answers", JSON.stringify(answers));
@@ -786,6 +792,7 @@ async function sendAnswers(answers) {
         const result = readsHere
             ? await ownKey.refine({
                   file: sourceFile,
+                  strips: sourceStrips,
                   instrument: ui.instrument.value,
                   musicxml: currentMusicXml,
                   answers,

@@ -14,6 +14,8 @@
 // cannot see a picture in SVG source - it gets hundreds of kilobytes of path
 // data - so that is drawn onto the canvas too, as the picture it describes.
 
+import { inkPerRow, stripCuts } from "./strips.js";
+
 /** Long edge after scaling. Comfortably above what either provider keeps. */
 export const MAX_EDGE = 2400;
 
@@ -122,4 +124,54 @@ async function svgPicture(file) {
 function length(value) {
     const match = /^\s*([\d.]+)\s*(px|pt|pc|in|cm|mm)?\s*$/.exec(value ?? "");
     return match ? Number(match[1]) * UNITS[match[2] ?? ""] : 0;
+}
+
+/**
+ * A prepared page cut into strips between its systems, top to bottom, each at
+ * the page's full width - or none, when the page does not split (a single
+ * system, a skewed photo with no clear gaps, or something that is not an
+ * image). See strips.js for why.
+ */
+export async function cutIntoStrips(page) {
+    if (!page.type.startsWith("image/")) return [];
+    let bitmap;
+    try {
+        bitmap = await createImageBitmap(page);
+    } catch {
+        return [];
+    }
+    const { width, height } = bitmap;
+
+    // The gaps are found on a narrow copy - plenty to see blank paper - and
+    // the strips cut from the full one.
+    const narrow = Math.min(width, 600);
+    const rows = Math.round((height * narrow) / width);
+    const probe = document.createElement("canvas");
+    probe.width = narrow;
+    probe.height = rows;
+    const g = probe.getContext("2d", { willReadFrequently: true });
+    g.drawImage(bitmap, 0, 0, narrow, rows);
+    const ink = inkPerRow(g.getImageData(0, 0, narrow, rows).data, narrow, rows);
+    const cuts = stripCuts(ink, {
+        // Specks of dust or noise in a photo are not music.
+        blank: Math.ceil(narrow * 0.004),
+        // A blank band this tall is between systems, not inside one.
+        minGap: Math.max(3, Math.round(rows * 0.006)),
+        // About two systems of a typical page: wide strips, little height.
+        target: Math.round(narrow * 0.3),
+    }).map((y) => Math.round((y * height) / rows));
+
+    const strips = [];
+    const edges = [0, ...cuts, height];
+    for (let i = 0; i + 1 < edges.length; i++) {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = edges[i + 1] - edges[i];
+        canvas.getContext("2d").drawImage(bitmap, 0, -edges[i]);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, page.type, 0.92));
+        if (!blob) return [];
+        strips.push(new File([blob], page.name.replace(/(\.[^.]+)?$/, `-${i + 1}$1`), { type: page.type }));
+    }
+    bitmap.close?.();
+    return cuts.length ? strips : [];
 }

@@ -10,6 +10,7 @@ import {
     RECHECK_SCHEMA,
     RESPONSE_SCHEMA,
     SYSTEM_PROMPT,
+    aboutStrips,
     userPromptForContinuing,
     userPromptForRecheck,
     userPromptForRefine,
@@ -28,29 +29,36 @@ const MAX_CONTINUATIONS = 4;
  * `onContinue` hears the bar a reading picks up from, when it has to, and
  * `onRecheck` how many bars are being looked at again.
  */
-export async function transcribe(generate, { file, instrument, onContinue, onRecheck }) {
+export async function transcribe(generate, { file, strips, instrument, onContinue, onRecheck }) {
     const result = parseResult(
         await complete(generate, {
             system: SYSTEM_PROMPT,
-            text: userPromptForTranscribe(instrument),
+            text: userPromptForTranscribe(instrument) + seen(strips),
             file,
+            strips,
             schema: RESPONSE_SCHEMA,
         }, onContinue),
     );
-    return recheck(generate, result, { file, instrument, onRecheck });
+    return recheck(generate, result, { file, strips, instrument, onRecheck });
 }
 
 /** Second pass: the same file, the MusicXML so far, and the answers. */
-export async function refine(generate, { file, instrument, musicxml, answers, onContinue, onRecheck }) {
+export async function refine(generate, { file, strips, instrument, musicxml, answers, onContinue, onRecheck }) {
     const result = parseResult(
         await complete(generate, {
             system: SYSTEM_PROMPT,
-            text: userPromptForRefine(instrument, musicxml, answers),
+            text: userPromptForRefine(instrument, musicxml, answers) + seen(strips),
             file,
+            strips,
             schema: RESPONSE_SCHEMA,
         }, onContinue),
     );
-    return recheck(generate, result, { file, instrument, onRecheck });
+    return recheck(generate, result, { file, strips, instrument, onRecheck });
+}
+
+/** What to say about how the page is sent: nothing, unless it is in strips. */
+function seen(strips) {
+    return strips?.length ? aboutStrips(strips.length) : "";
 }
 
 /**
@@ -62,7 +70,7 @@ export async function refine(generate, { file, instrument, musicxml, answers, on
  * result says which bars are still off, by number. If the recheck itself
  * fails, the reading stands as it was: it is still the best there is.
  */
-async function recheck(generate, result, { file, instrument, onRecheck = () => {} }) {
+async function recheck(generate, result, { file, strips, instrument, onRecheck = () => {} }) {
     const { uneven } = checkMeasures(result.musicxml);
     if (!uneven.length) return { ...result, uneven: [] };
 
@@ -75,8 +83,9 @@ async function recheck(generate, result, { file, instrument, onRecheck = () => {
     try {
         const answer = await generate({
             system: SYSTEM_PROMPT,
-            text: userPromptForRecheck(instrument, musicxml, uneven),
+            text: userPromptForRecheck(instrument, musicxml, uneven) + seen(strips),
             file,
+            strips,
             schema: RECHECK_SCHEMA,
         });
         usage = added(usage, answer.usage);

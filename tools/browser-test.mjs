@@ -1601,6 +1601,46 @@ async function run() {
         check("an SVG with no type is drawn too", photo.untypedType, "image/png");
         check("an SVG that cannot be drawn says so", /Could not draw broken\.svg/.test(photo.broken), true);
 
+        console.log("\ncutting a page into strips");
+        const cut = await page.evaluate(`
+            const { cutIntoStrips } = await import("./js/photo.js");
+            // A page: white paper, a title, and systems of five staff lines
+            // with stems, separated by blank paper.
+            const pageOf = (systems) => new Promise((resolve) => {
+                const c = document.createElement("canvas");
+                c.width = 1200; c.height = 1700;
+                const g = c.getContext("2d");
+                g.fillStyle = "#fff"; g.fillRect(0, 0, 1200, 1700);
+                g.fillStyle = "#000";
+                g.fillRect(400, 60, 400, 30); // the title
+                for (let s = 0; s < systems; s++) {
+                    const top = 160 + s * 150;
+                    for (let line = 0; line < 5; line++) g.fillRect(60, top + 20 + line * 14, 1080, 2);
+                    for (let x = 100; x < 1100; x += 60) g.fillRect(x, top, 3, 100); // stems
+                }
+                c.toBlob((blob) => resolve(new File([blob], "page.png", { type: "image/png" })), "image/png");
+            });
+            const sizes = async (strips) => Promise.all(strips.map(async (s) => {
+                const b = await createImageBitmap(s);
+                return [b.width, b.height];
+            }));
+            const ten = await cutIntoStrips(await pageOf(10));
+            return {
+                ten: await sizes(ten),
+                names: ten.map((s) => s.name),
+                types: [...new Set(ten.map((s) => s.type))],
+                one: (await cutIntoStrips(await pageOf(1))).length,
+                blank: (await cutIntoStrips(await pageOf(0))).length,
+                pdf: (await cutIntoStrips(new File(["%PDF-1.4"], "page.pdf", { type: "application/pdf" }))).length,
+            };
+        `);
+        check("a page of ten systems is cut into strips", cut.ten.length >= 4 && cut.ten.length <= 8, true);
+        check("each the page's full width", [...new Set(cut.ten.map(([w]) => w))], [1200]);
+        check("together the whole page", cut.ten.reduce((sum, [, h]) => sum + h, 0), 1700);
+        check("named in order, in the page's format", [cut.names[0], cut.names[1], cut.types], ["page-1.png", "page-2.png", ["image/png"]]);
+        check("a single system is read whole", cut.one, 0);
+        check("so is a page with no music, and a PDF", [cut.blank, cut.pdf], [0, 0]);
+
         // --- the clarifying question panel ----------------------------------
         console.log("\nclarifying questions");
         const asked = await page.evaluate(`
