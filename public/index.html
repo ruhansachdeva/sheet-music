@@ -75,6 +75,17 @@
                 accept="image/*"
                 capture="environment"
             />
+            <!-- Photos from the camera wait here, so a piece can be taken page by
+                 page and read as one score. See app.js. -->
+            <div id="pages-taken" class="pages-taken" hidden>
+                <div id="pages-thumbs" class="pages-thumbs"></div>
+                <p id="pages-count" class="pages-count" aria-live="polite"></p>
+                <div class="pages-actions">
+                    <button type="button" id="read-pages" class="primary">Read</button>
+                    <button type="button" id="add-page">Add a page</button>
+                    <button type="button" id="clear-pages">Clear</button>
+                </div>
+            </div>
             <p class="hint">
                 MusicXML and MIDI play straight away; photos and PDFs are read for you.
                 Choose several photos to read the pages of one piece together. You can

@@ -778,6 +778,47 @@ body.dropping #setup {
     font-size: var(--text-base);
 }
 
+/* Photos taken so far, waiting to be read together. */
+.pages-taken {
+    display: grid;
+    gap: var(--s2);
+    padding: var(--s3);
+    background: var(--surface-sunk);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+}
+
+.pages-thumbs {
+    display: flex;
+    gap: var(--s2);
+    overflow-x: auto;
+}
+
+.pages-thumbs img {
+    height: 72px;
+    width: auto;
+    flex: none;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    background: var(--surface);
+}
+
+.pages-count {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--ink-soft);
+}
+
+.pages-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+}
+
+.pages-actions button {
+    min-height: var(--tap);
+}
+
 /* The sample list is secondary, so it stays folded away until asked for. */
 .try summary {
     font-size: var(--text-sm);
