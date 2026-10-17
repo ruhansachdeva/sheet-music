@@ -58,7 +58,8 @@ export function checkMeasures(xml) {
         const expected = (divisions * 4 * beats) / beatType;
         if (!implicit) {
             for (const [name, total] of perVoice) {
-                if (Math.abs(total - expected) > 1e-6) uneven.push({ part, measure, voice: name, total, expected });
+                // No divisions or time signature to go by counts as uneven too.
+                if (!(Math.abs(total - expected) <= 1e-6)) uneven.push({ part, measure, voice: name, total, expected });
             }
         }
         measures += 1;

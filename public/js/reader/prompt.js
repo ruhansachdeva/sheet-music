@@ -74,6 +74,35 @@ export const CONTINUATION_SCHEMA = {
     additionalProperties: false,
 };
 
+/**
+ * The shape of an answer to a recheck: only the measures asked about, each
+ * corrected in full, to be put back in place of the ones that did not add up.
+ */
+export const RECHECK_SCHEMA = {
+    type: "object",
+    properties: {
+        measures: {
+            type: "array",
+            description: "Each measure that was asked about, corrected.",
+            items: {
+                type: "object",
+                properties: {
+                    part: { type: "string", description: "The id of the part the measure is in, e.g. P1." },
+                    number: { type: "string", description: "The measure's number attribute, as in the score." },
+                    musicxml: {
+                        type: "string",
+                        description: "The whole corrected <measure> element, from <measure ...> to </measure>.",
+                    },
+                },
+                required: ["part", "number", "musicxml"],
+                additionalProperties: false,
+            },
+        },
+    },
+    required: ["measures"],
+    additionalProperties: false,
+};
+
 export const SYSTEM_PROMPT = `You read photographs and PDFs of sheet music and turn them into MusicXML.
 
 Output a complete, valid MusicXML 3.1 \`score-partwise\` document:
@@ -90,6 +119,7 @@ Output a complete, valid MusicXML 3.1 \`score-partwise\` document:
 - Chords: the first note of a chord is a plain note, every other note in it carries <chord/>.
 - Multiple voices and staves: <staves> in <attributes>, a <voice> and <staff> element in every note, and <backup> between voices. Piano is two staves, treble on staff 1 and bass on staff 2, usually voice 1 and voice 2.
 - Repeats as <barline> with <bar-style>, <repeat direction="forward"/> or <repeat direction="backward"/>, and endings as <ending> when the score shows them.
+- A measure-repeat sign - a slash between two dots filling the bar - means the bar before is played again: write that bar's notes out again in full, exactly the same.
 - Drums and other unpitched percussion: a <score-instrument> plus <midi-instrument> per kit piece, with <midi-channel>10</midi-channel> and the General MIDI <midi-unpitched> number (counting from 1, so the bass drum is 37), notes written as <unpitched> with <display-step> and <display-octave>, and an <instrument> reference on every note.
 - Pitches at WRITTEN pitch, exactly as printed on the page. Do not transpose to concert pitch - the player handles that.
 - Dynamics, articulations and slurs where you can read them.
@@ -138,6 +168,31 @@ ${sofar}
 Carry on from exactly where it stops. In \`rest\`, write only what comes after that last </measure>: ${after}, through </score-partwise>. Do not repeat anything already written. Keep to the same divisions, instrument ids, voices and compact style. If that part is already finished, \`rest\` starts with </part>.
 
 Give \`instrument\` and \`questions\` for the whole page, as you would have at the end of the first answer.`;
+}
+
+/**
+ * Asking again about the measures that do not add up. `uneven` is from
+ * measures.js: one entry per voice that is off.
+ */
+export function userPromptForRecheck(instrument, musicxml, uneven) {
+    const parts = new Set(uneven.map((u) => u.part));
+    const lines = uneven
+        .map((u) =>
+            `- Measure ${u.measure}${parts.size > 1 ? ` of part ${u.part}` : ""}, voice ${u.voice}: ` +
+            `its durations total ${u.total}, but the time signature needs ${u.expected}.`)
+        .join("\n");
+
+    return `Here is the MusicXML you produced for this sheet music (instrument: ${instrument}). These measures do not add up:
+
+${lines}
+
+A measure that does not add up has a misread note, dot, rest or tuplet in it. Look at each of these measures on the page again, note by note, and correct it so that every voice adds up - dotted notes, sixteenths and tuplets are the usual culprits. Keep everything else in the measure (attributes, directions, barlines) as it is.
+
+Return only these measures, each as its whole corrected <measure> element, in the same compact style, with its part id and number. Do not return the rest of the score.
+
+The current MusicXML:
+
+${musicxml}`;
 }
 
 export function userPromptForRefine(instrument, musicxml, answers) {

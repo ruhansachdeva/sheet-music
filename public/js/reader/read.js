@@ -4,11 +4,14 @@
 // back, so a reading is held to one standard wherever it was made.
 
 import { ReadError } from "./errors.js";
+import { checkMeasures } from "./measures.js";
 import {
     CONTINUATION_SCHEMA,
+    RECHECK_SCHEMA,
     RESPONSE_SCHEMA,
     SYSTEM_PROMPT,
     userPromptForContinuing,
+    userPromptForRecheck,
     userPromptForRefine,
     userPromptForTranscribe,
 } from "./prompt.js";
@@ -22,10 +25,11 @@ const MAX_CONTINUATIONS = 4;
 
 /**
  * First pass: a photo or PDF in, MusicXML plus any questions out.
- * `onContinue` hears the bar a reading picks up from, when it has to.
+ * `onContinue` hears the bar a reading picks up from, when it has to, and
+ * `onRecheck` how many bars are being looked at again.
  */
-export async function transcribe(generate, { file, instrument, onContinue }) {
-    return parseResult(
+export async function transcribe(generate, { file, instrument, onContinue, onRecheck }) {
+    const result = parseResult(
         await complete(generate, {
             system: SYSTEM_PROMPT,
             text: userPromptForTranscribe(instrument),
@@ -33,11 +37,12 @@ export async function transcribe(generate, { file, instrument, onContinue }) {
             schema: RESPONSE_SCHEMA,
         }, onContinue),
     );
+    return recheck(generate, result, { file, instrument, onRecheck });
 }
 
 /** Second pass: the same file, the MusicXML so far, and the answers. */
-export async function refine(generate, { file, instrument, musicxml, answers, onContinue }) {
-    return parseResult(
+export async function refine(generate, { file, instrument, musicxml, answers, onContinue, onRecheck }) {
+    const result = parseResult(
         await complete(generate, {
             system: SYSTEM_PROMPT,
             text: userPromptForRefine(instrument, musicxml, answers),
@@ -45,6 +50,82 @@ export async function refine(generate, { file, instrument, musicxml, answers, on
             schema: RESPONSE_SCHEMA,
         }, onContinue),
     );
+    return recheck(generate, result, { file, instrument, onRecheck });
+}
+
+/**
+ * A measure that does not add up is always misread, and how carefully the
+ * model checks its own work varies a lot from one read to the next. So the
+ * reading is checked here, and the model is shown just the measures that are
+ * off - with what each totals and needs - and asked to look again. Each
+ * corrected measure that now adds up takes the place of the old one. The
+ * result says which bars are still off, by number. If the recheck itself
+ * fails, the reading stands as it was: it is still the best there is.
+ */
+async function recheck(generate, result, { file, instrument, onRecheck = () => {} }) {
+    const { uneven } = checkMeasures(result.musicxml);
+    if (!uneven.length) return { ...result, uneven: [] };
+
+    const key = (part, measure) => `${part}\n${measure}`;
+    const asked = new Set(uneven.map((u) => key(u.part, u.measure)));
+    onRecheck(asked.size);
+
+    let musicxml = result.musicxml;
+    let usage = result.usage;
+    try {
+        const answer = await generate({
+            system: SYSTEM_PROMPT,
+            text: userPromptForRecheck(instrument, musicxml, uneven),
+            file,
+            schema: RECHECK_SCHEMA,
+        });
+        usage = added(usage, answer.usage);
+        const corrections = answer.incomplete ? [] : parseJson(answer.text)?.measures ?? [];
+        for (const { part, number: given, musicxml: measure } of Array.isArray(corrections) ? corrections : []) {
+            const number = String(given);
+            if (!asked.has(key(part, number))) continue;
+            const replaced = replaceMeasure(musicxml, part, number, measure);
+            if (replaced && fewerUneven(replaced, musicxml, key(part, number))) musicxml = replaced;
+        }
+    } catch {
+        // Kept as read: the recheck only ever improves on it.
+    }
+
+    const still = checkMeasures(musicxml).uneven;
+    return { ...result, musicxml, usage, uneven: [...new Set(still.map((u) => u.measure))] };
+}
+
+/**
+ * Whether a measure, replaced, now adds up - without making any other
+ * measure stop adding up, as a lost <divisions> or time signature would.
+ */
+function fewerUneven(after, before, which) {
+    const off = (xml) => new Set(checkMeasures(xml).uneven.map((u) => `${u.part}\n${u.measure}`));
+    const was = off(before);
+    const now = off(after);
+    return !now.has(which) && [...now].every((bar) => was.has(bar));
+}
+
+/** The score with one measure of one part swapped for another, or null. */
+function replaceMeasure(xml, part, number, measure) {
+    const fresh = String(measure ?? "").trim();
+    const opening = /^<measure\s[^>]*\bnumber="([^"]*)"[^>]*>/.exec(fresh);
+    if (!opening || opening[1] !== number || !fresh.endsWith("</measure>")) return null;
+
+    const partAt = xml.search(new RegExp(`<part\\s[^>]*\\bid="${escaped(part)}"`));
+    if (partAt < 0) return null;
+    const partEnd = xml.indexOf("</part>", partAt);
+    const start = new RegExp(`<measure\\s[^>]*\\bnumber="${escaped(number)}"[^>]*>`, "g");
+    start.lastIndex = partAt;
+    const found = start.exec(xml);
+    if (!found || (partEnd >= 0 && found.index > partEnd)) return null;
+    const end = xml.indexOf("</measure>", found.index);
+    if (end < 0) return null;
+    return xml.slice(0, found.index) + fresh + xml.slice(end + "</measure>".length);
+}
+
+function escaped(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
