@@ -107,7 +107,11 @@ const reader = createServer(async (request, response) => {
     // Re-reading a bar: bar 1 comes back with its first note a step lower,
     // or - "reread same" - exactly as it was.
     if (text.includes("read wrong.")) {
-        rereadAsked.push(/found measure (\d+) read wrong/.exec(text)?.[1]);
+        rereadAsked.push(/found measures? ([\d, ]+) read wrong/.exec(text)?.[1]);
+        // Bar 2 of the misread Twinkle, asked about from its shading: right this time.
+        if (/found measure 2 read wrong/.test(text)) {
+            return streamed(JSON.stringify({ measures: [{ part: "P1", number: "2", musicxml: bar2 }] }));
+        }
         // The bar as it is in the score sent - so "the same" is the same.
         const current = /<measure number="1"[\s\S]*?<\/measure>/.exec(text.slice(text.indexOf("The current MusicXML")))[0];
         const answer = behaviour === "reread same" ? current : current.replace("<step>G</step>", "<step>F</step>");
@@ -541,6 +545,26 @@ try {
     check("a bar the recheck cannot fix is pointed out",
         /Bar 2 does not add up to the time signature/.test(await status()), true);
     check("and shaded on the score", await evaluate(`return document.querySelectorAll("#score .bar-mark").length`), 1);
+    rereadAsked = [];
+    const shadedAgain = await evaluate(`
+        const button = document.getElementById("reread-shaded");
+        const offered = !button.hidden && button.textContent;
+        button.click();
+        for (let i = 0; i < 50 && !button.disabled; i++) await new Promise((r) => setTimeout(r, 20));
+        for (let i = 0; i < 200 && button.disabled; i++) await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 300));
+        return {
+            offered,
+            marks: document.querySelectorAll("#score .bar-mark").length,
+            stillOffered: !button.hidden,
+            said: document.getElementById("status").textContent,
+        };
+    `);
+    check("the shaded bar is offered to be read again", shadedAgain.offered, "Re-read the shaded bar");
+    check("which sends that bar back", rereadAsked, ["2"]);
+    check("and, read right, it is no longer shaded",
+        [shadedAgain.marks, shadedAgain.stillOffered, shadedAgain.said],
+        [0, false, "Bar 2 read again and corrected. Press play to hear it."]);
     behaviour = "read";
     // --- the hosted copy, reading with your own key -----------------------
     // The static build, as GitHub Pages serves it: no server, an api/health
