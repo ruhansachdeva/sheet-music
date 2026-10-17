@@ -219,6 +219,7 @@ time.
 ## Automated checks
 
 ```sh
+npm run test:offline     # every check below that needs no browser, key or network
 npm run check            # every measure in samples/ adds up to its time signature
 npm test                 # drives the app in headless Chrome
 npm run test:audio       # also plays, and watches the audio clock and cursor
@@ -230,6 +231,9 @@ npm run test:read-flow   # photo -> reading -> question -> answer, against a loc
 npm run test:transcribe  # end to end through the model - needs a key
 npm run test:accuracy    # how accurately a page is read back - needs a key
 ```
+
+Every pull request runs all of these but the two that need a key, browser ones
+included, in the Checks workflow ([`.github/workflows/checks.yml`](.github/workflows/checks.yml)).
 
 `npm test` is the useful one. It drives a real browser over the DevTools
 protocol and asserts on the timeline the timing engine produces: that a dotted
