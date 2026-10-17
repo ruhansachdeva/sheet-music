@@ -64,6 +64,8 @@ const fake = createServer(async (request, response) => {
     if (status === "dropped") {
         return response.end(sse({ event_type: "error", error: { code: 503, message: `${model} is currently experiencing high demand. Please try again later.` } }));
     }
+    // Cut while still thinking, before any answer: the stream just ends.
+    if (status === "cut early") return response.end();
     if (status === "all thinking") {
         return response.end(sse({ event_type: "interaction.completed", interaction: { id: "x", model, status: "incomplete" } }));
     }
@@ -123,7 +125,13 @@ try {
     const failedRead = await read({ "gemini-flash-latest": ["failed"] });
     check("a read that fails part-way says so", [failedRead.error, /fake gave up/.test(failedRead.message)], [422, true]);
     const cut = await read({ "gemini-flash-latest": ["cut"] });
-    check("a connection that drops before the end says so", [cut.error, /closed before/.test(cut.message)], [502, true]);
+    check("a stream cut part-way comes back with what it wrote, to be carried on",
+        [cut.incomplete, cut.text], [true, '{"read']);
+    const cutEarly = await read({ "gemini-flash-latest": ["cut early", 200] });
+    check("one cut before any answer is started over", [cutEarly.model, cutEarly.asked["gemini-flash-latest"]], ["gemini-flash-latest", 2]);
+    const keptCutting = await read({ "gemini-flash-latest": ["cut early"] });
+    check("three times at most, then it says so",
+        [keptCutting.asked["gemini-flash-latest"], keptCutting.error, /kept dropping/.test(keptCutting.message)], [4, 502, true]);
 
     const dropped = await read({ "gemini-flash-latest": ["dropped", 200] });
     check("a read dropped part-way for high demand is started over", [dropped.model, dropped.asked["gemini-flash-latest"]], ["gemini-flash-latest", 2]);
