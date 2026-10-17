@@ -175,3 +175,62 @@ export async function cutIntoStrips(page) {
     bitmap.close?.();
     return cuts.length ? strips : [];
 }
+
+/** pdf.js, loaded from the CDN the first time a PDF is opened. */
+const PDFJS = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/";
+
+/**
+ * Above this many pages a PDF is sent as it is: drawn and cut up, it would
+ * be too many images for one request.
+ */
+export const MAX_PDF_PAGES = 8;
+
+/**
+ * The pages of a PDF, drawn as PNGs at reading size on white paper - or none
+ * if it is longer than MAX_PDF_PAGES, or will not open or draw.
+ */
+export async function pdfPages(file) {
+    try {
+        const pdfjs = await import(`${PDFJS}pdf.min.mjs`);
+        pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS}pdf.worker.min.mjs`;
+        const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+        if (pdf.numPages > MAX_PDF_PAGES) return [];
+
+        const name = file.name.replace(/\.[^.]+$/, "");
+        const pages = [];
+        for (let n = 1; n <= pdf.numPages; n++) {
+            const page = await pdf.getPage(n);
+            const natural = page.getViewport({ scale: 1 });
+            const viewport = page.getViewport({ scale: MAX_EDGE / Math.max(natural.width, natural.height) });
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.round(viewport.width);
+            canvas.height = Math.round(viewport.height);
+            const context = canvas.getContext("2d");
+            context.fillStyle = "#fff";
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            await page.render({ canvasContext: context, viewport }).promise;
+            const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+            if (!blob) return [];
+            pages.push(new File([blob], `${name}-page-${n}.png`, { type: "image/png" }));
+        }
+        await pdf.destroy();
+        return pages;
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * What a prepared file is best read from, in reading order: an image's
+ * strips; or a PDF's pages, each cut into strips where it will cut. Empty when
+ * the file is best read as it is.
+ */
+export async function stripsOf(file) {
+    if (file.type !== "application/pdf") return cutIntoStrips(file);
+    const strips = [];
+    for (const page of await pdfPages(file)) {
+        const cut = await cutIntoStrips(page);
+        strips.push(...(cut.length ? cut : [page]));
+    }
+    return strips;
+}
