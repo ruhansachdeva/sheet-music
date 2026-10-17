@@ -110,6 +110,8 @@ const reader = createServer(async (request, response) => {
         stream,
         key,
         withImage: input.some((item) => item.type === "image"),
+        images: input.filter((item) => item.type === "image").map((item) => item.resolution ?? "default"),
+        strips: /comes as (\d+) images/.exec(text)?.[1] ?? null,
         answer: /My answer: (.*)/.exec(text)?.[1] ?? null,
     });
     const answer = behaviour === "not music"
@@ -331,20 +333,53 @@ try {
         const piece = document.getElementById("piece-name");
         const status = document.getElementById("status");
         const said = new Set();
-        // The uploads lock while it reads, and unlock when it is done - the
-        // piece's name may already say "read by" from the reading before.
-        const locked = () => document.getElementById("choose-file").disabled;
-        for (let i = 0; i < 50 && !locked(); i++) await new Promise((r) => setTimeout(r, 50));
-        for (let i = 0; i < 200 && locked(); i++) {
+        // Done when a new score is up, or the read has failed - the piece's
+        // name may already say "read by" from the reading before.
+        const before = window.sheetMusic.timeline;
+        for (let i = 0; i < 200 && window.sheetMusic.timeline === before && !status.classList.contains("error"); i++) {
             await new Promise((r) => setTimeout(r, 100));
             said.add(status.textContent.replace(/\\d+:\\d\\d/, "m:ss"));
         }
+        // The status line settles once the score is drawn.
+        await new Promise((r) => setTimeout(r, 300));
         return {
             piece: piece.textContent,
             notes: window.sheetMusic.timeline.notes.length,
             said: [...said],
         };
     `);
+    console.log("\na page with many systems");
+    // Ten systems of staff lines with blank paper between, through the picker.
+    const stripsRead = () => evaluate(`
+        const c = document.createElement("canvas");
+        c.width = 1200; c.height = 1700;
+        const g = c.getContext("2d");
+        g.fillStyle = "#fff"; g.fillRect(0, 0, 1200, 1700);
+        g.fillStyle = "#000";
+        for (let s = 0; s < 10; s++) {
+            for (let line = 0; line < 5; line++) g.fillRect(60, 180 + s * 150 + line * 14, 1080, 2);
+        }
+        const png = await new Promise((r) => c.toBlob(r, "image/png"));
+        const input = document.getElementById("file");
+        const files = new DataTransfer();
+        files.items.add(new File([png], "page.png", { type: "image/png" }));
+        input.files = files.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        // Done when a new score is up, or the read has failed.
+        const before = window.sheetMusic.timeline;
+        const status = document.getElementById("status");
+        for (let i = 0; i < 200 && window.sheetMusic.timeline === before && !status.classList.contains("error"); i++) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        return document.getElementById("piece-name").textContent;
+    `);
+    behaviour = "read";
+    const stripCount = asked.length;
+    check("is read", await stripsRead(), "Twinkle — read by Gemini");
+    const sentStrips = asked[stripCount];
+    check("from strips, each in full detail", sentStrips.images.length > 1 && sentStrips.images.every((r) => r === "ultra_high"), true);
+    check("said to be one page in that many slices", sentStrips.strips, String(sentStrips.images.length));
+
     behaviour = "long";
     carriedOn = [];
     const long = await longRead();
