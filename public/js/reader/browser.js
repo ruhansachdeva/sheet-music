@@ -99,6 +99,11 @@ export function refine({ file, strips, instrument, musicxml, answers, onProgress
     });
 }
 
+/** Chosen bars of a reading, read again. */
+export function reread({ file, strips, instrument, musicxml, bars, onProgress }) {
+    return read.reread(generateHere(withPlace(onProgress)), { file, strips, instrument, musicxml, bars });
+}
+
 /**
  * The model's headings - with, once a reading has gone past one answer, what
  * the later answer is for in front of them: the bar a dense page is carrying
