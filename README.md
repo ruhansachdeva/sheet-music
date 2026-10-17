@@ -22,6 +22,8 @@ a metronome, and the current note lit up on the score.
 - **Take a photo** on a phone: the camera button opens the rear camera, so you
   can point it at a page and have it played back. Photos wait in a tray, so a
   piece can be photographed page by page and read as one score.
+- **Check it against the page**: **Show the page** opens the photo, PDF or SVG
+  a reading came from above the score, to compare bar by bar.
 - **Fix a bar**: a bar a reading still got wrong is shaded on the score, and
   **Re-read bar N** reads the bar you are on again - tap a wrong note to go to
   it - without reading the whole page.
